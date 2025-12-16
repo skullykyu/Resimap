@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { ResidenceConfig, ResidenceID, OriginOptions, Tenant } from '../types';
-import { Settings as SettingsIcon, Trash2, Plus, School, Building, AlertOctagon, Download, Upload, FileJson } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { ResidenceConfig, ResidenceID, OriginOptions, Tenant, FirebaseConfig } from '../types';
+import { Settings as SettingsIcon, Trash2, Plus, School, Building, AlertOctagon, Download, Upload, FileJson, Copy, Check, Info, Cloud, Wifi, WifiOff } from 'lucide-react';
 
 interface SettingsProps {
   config: ResidenceConfig[];
@@ -8,8 +8,13 @@ interface SettingsProps {
   originOptions: OriginOptions;
   onUpdateOriginOptions: (newOptions: OriginOptions) => void;
   onResetAll: () => void;
-  tenants: Tenant[]; // Need full list for export
+  tenants: Tenant[];
   onImportData: (data: any) => void;
+  
+  // Cloud Props
+  onConnectCloud: (config: FirebaseConfig) => void;
+  onDisconnectCloud: () => void;
+  isCloudConnected: boolean;
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
@@ -19,7 +24,10 @@ const Settings: React.FC<SettingsProps> = ({
   onUpdateOriginOptions, 
   onResetAll,
   tenants,
-  onImportData
+  onImportData,
+  onConnectCloud,
+  onDisconnectCloud,
+  isCloudConnected
 }) => {
   // Config Management
   const handleChangeConfig = (id: ResidenceID, field: keyof ResidenceConfig, value: string) => {
@@ -32,6 +40,18 @@ const Settings: React.FC<SettingsProps> = ({
   // Origin List Management Inputs
   const [newSchool, setNewSchool] = useState('');
   const [newCompany, setNewCompany] = useState('');
+  const [copied, setCopied] = useState(false);
+  
+  // Cloud Config State
+  const [firebaseConfigInput, setFirebaseConfigInput] = useState('');
+  const [showCloudForm, setShowCloudForm] = useState(false);
+
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('resimap_firebase_config');
+    if (savedConfig) {
+      setFirebaseConfigInput(savedConfig);
+    }
+  }, []);
   
   // File Import Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,17 +83,48 @@ const Settings: React.FC<SettingsProps> = ({
     });
   };
 
+  // --- Cloud Logic ---
+  const handleConnect = () => {
+    try {
+      // Try to parse JSON from input (user might paste full object)
+      // Or handle loose format if needed. Assuming JSON for now.
+      const cleanInput = firebaseConfigInput.replace(/const firebaseConfig =/g, '').replace(/;/g, '').trim();
+      
+      // If user pasted just the object content without braces? unlikely but possible.
+      // Let's assume they paste the object: { apiKey: "...", ... }
+      // Using new Function to parse simplified JS object notation if JSON.parse fails is risky but helpful for copy-paste from docs
+      // Safe approach: JSON.parse requires strict quotes.
+      
+      // Let's try to make it user friendly.
+      let configObj;
+      try {
+          configObj = JSON.parse(cleanInput);
+      } catch (e) {
+          // Fallback: simple eval-like parsing for JS object string (risky in prod, ok for this tool)
+          // better: ask user to paste valid JSON.
+          alert("Erreur de format. Assurez-vous de coller un objet JSON valide (avec des guillemets doubles pour les clés).");
+          return;
+      }
+      
+      onConnectCloud(configObj);
+    } catch (e) {
+      alert("Erreur de configuration. Vérifiez le format.");
+    }
+  };
+
   // --- Export / Import Logic ---
   
-  const handleExport = () => {
-    const dataToExport = {
+  const getExportData = () => {
+    return {
       tenants,
       config,
       origins: originOptions,
       exportDate: new Date().toISOString()
     };
-    
-    const jsonString = JSON.stringify(dataToExport, null, 2);
+  };
+  
+  const handleExport = () => {
+    const jsonString = JSON.stringify(getExportData(), null, 2);
     const blob = new Blob([jsonString], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     
@@ -83,6 +134,14 @@ const Settings: React.FC<SettingsProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleCopyToClipboard = () => {
+    const jsonString = JSON.stringify(getExportData(), null, 2);
+    navigator.clipboard.writeText(jsonString).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   const handleImportClick = () => {
@@ -107,47 +166,154 @@ const Settings: React.FC<SettingsProps> = ({
       }
     };
     reader.readAsText(file);
-    // Reset input
     e.target.value = '';
   };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 mb-8">
       
-      {/* 0. Data Sharing / Backup */}
+      {/* CLOUD SYNC SECTION */}
+      <div className={`rounded-xl shadow-sm border overflow-hidden ${isCloudConnected ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200'}`}>
+        <div className={`p-6 border-b flex items-center gap-3 ${isCloudConnected ? 'border-indigo-100 bg-indigo-100/50' : 'border-slate-100 bg-slate-50'}`}>
+          <div className={`p-2 rounded-lg ${isCloudConnected ? 'bg-indigo-200 text-indigo-700' : 'bg-slate-200 text-slate-700'}`}>
+            <Cloud className="w-6 h-6" />
+          </div>
+          <div className="flex-grow">
+            <h2 className={`text-xl font-bold ${isCloudConnected ? 'text-indigo-900' : 'text-slate-800'}`}>
+              Synchronisation Cloud (Multi-Utilisateurs)
+            </h2>
+            <p className={`${isCloudConnected ? 'text-indigo-700' : 'text-slate-500'} text-sm`}>
+              {isCloudConnected 
+                ? 'Vos données sont synchronisées en temps réel avec Firebase.' 
+                : 'Connectez une base de données Firebase pour partager les données avec vos collègues.'}
+            </p>
+          </div>
+          <div>
+            {isCloudConnected ? (
+              <span className="flex items-center gap-2 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold uppercase tracking-wide border border-green-200">
+                <Wifi className="w-4 h-4" /> Connecté
+              </span>
+            ) : (
+               <span className="flex items-center gap-2 px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-xs font-bold uppercase tracking-wide border border-slate-200">
+                <WifiOff className="w-4 h-4" /> Hors Ligne
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6">
+          {isCloudConnected ? (
+            <div className="flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-lg border border-indigo-100 text-sm text-indigo-800">
+                <p><strong>Félicitations !</strong> Votre application est connectée au cloud.</p>
+                <p className="mt-2">Pour que vos collègues accèdent aux mêmes données :</p>
+                <ol className="list-decimal ml-5 mt-1 space-y-1">
+                  <li>Envoyez-leur le lien de cette application (Netlify).</li>
+                  <li>Donnez-leur la configuration JSON ci-dessous.</li>
+                  <li>Ils doivent la coller dans cet onglet sur leur ordinateur.</li>
+                </ol>
+              </div>
+              <button 
+                onClick={onDisconnectCloud}
+                className="self-start px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
+              >
+                Déconnecter / Changer de base de données
+              </button>
+            </div>
+          ) : (
+            <div>
+              {!showCloudForm ? (
+                 <button 
+                  onClick={() => setShowCloudForm(true)}
+                  className="bg-slate-900 text-white hover:bg-slate-800 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  <Cloud className="w-4 h-4" />
+                  Configurer la connexion Firebase
+                </button>
+              ) : (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                  <div className="text-sm text-slate-600">
+                    <p className="mb-2">Collez ici l'objet de configuration fourni par la console Firebase (Project Settings {'>'} General {'>'} Your Apps {'>'} Web).</p>
+                    <p className="text-xs text-slate-400 font-mono bg-slate-50 p-2 rounded border border-slate-100">
+                      {`{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}`}
+                    </p>
+                  </div>
+                  <textarea
+                    value={firebaseConfigInput}
+                    onChange={(e) => setFirebaseConfigInput(e.target.value)}
+                    placeholder='Collez la config ici...'
+                    className="w-full h-32 p-3 font-mono text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={handleConnect}
+                      className="bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      Connecter au Cloud
+                    </button>
+                    <button 
+                      onClick={() => setShowCloudForm(false)}
+                      className="bg-white text-slate-600 border border-slate-300 hover:bg-slate-50 px-4 py-2 rounded-lg font-medium transition-colors"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 0. Data Sharing / Backup (Local) */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
           <div className="p-2 bg-slate-200 rounded-lg">
             <FileJson className="w-6 h-6 text-slate-700" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-800">Partage & Sauvegarde</h2>
-            <p className="text-slate-500 text-sm">Exportez vos données pour les partager avec vos collègues ou créer une sauvegarde.</p>
+            <h2 className="text-xl font-bold text-slate-800">Sauvegarde Manuelle (Fichiers)</h2>
+            <p className="text-slate-500 text-sm">Utile si vous n'utilisez pas le mode Cloud.</p>
           </div>
         </div>
-        <div className="p-6 flex flex-col sm:flex-row gap-4">
-          <button 
-            onClick={handleExport}
-            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
-          >
-            <Download className="w-5 h-5" />
-            Exporter les données (.json)
-          </button>
-          
-          <button 
-            onClick={handleImportClick}
-            className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
-          >
-            <Upload className="w-5 h-5" />
-            Importer une sauvegarde
-          </button>
-          <input 
-            type="file" 
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept=".json"
-            className="hidden" 
-          />
+        
+        <div className="p-6">
+          <div className="flex flex-col sm:flex-row gap-4 mb-4">
+            <button 
+              onClick={handleCopyToClipboard}
+              className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-sm border ${
+                copied 
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+              }`}
+            >
+              {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+              {copied ? 'Copié !' : 'Copier les données'}
+            </button>
+            
+            <button 
+              onClick={handleExport}
+              className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
+            >
+              <Download className="w-5 h-5" />
+              Télécharger (.json)
+            </button>
+            
+            <button 
+              onClick={handleImportClick}
+              className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
+            >
+              <Upload className="w-5 h-5" />
+              Importer
+            </button>
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".json"
+              className="hidden" 
+            />
+          </div>
         </div>
       </div>
 
@@ -288,32 +454,6 @@ const Settings: React.FC<SettingsProps> = ({
             </ul>
           </div>
 
-        </div>
-      </div>
-
-      {/* 3. Data Danger Zone */}
-      <div className="bg-white rounded-xl shadow-sm border border-red-200 overflow-hidden">
-        <div className="p-6 border-b border-red-50 bg-red-50/50 flex items-center gap-3">
-          <div className="p-2 bg-white rounded-lg border border-red-100">
-            <AlertOctagon className="w-6 h-6 text-red-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-red-800">Zone de Danger</h2>
-            <p className="text-red-600/80 text-sm">Actions irréversibles sur vos données locales.</p>
-          </div>
-        </div>
-        <div className="p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="text-sm text-slate-600">
-            <p className="font-semibold">Réinitialiser l'application</p>
-            <p>Cela effacera toutes les données enregistrées sur cet ordinateur et remettra les données de démonstration.</p>
-          </div>
-          <button
-            onClick={onResetAll}
-            className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 shadow-sm"
-          >
-            <Trash2 className="w-4 h-4" />
-            Tout effacer et réinitialiser
-          </button>
         </div>
       </div>
 

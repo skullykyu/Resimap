@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { MOCK_TENANTS, DEFAULT_RESIDENCE_CONFIG, DEFAULT_ORIGIN_OPTIONS } from './constants';
-import { Tenant, ResidenceConfig, PersonStatus, OriginOptions } from './types';
+import { Tenant, ResidenceConfig, PersonStatus, OriginOptions, FirebaseConfig } from './types';
 import Dashboard from './components/Dashboard';
 import TenantForm from './components/TenantForm';
 import RelationshipMap from './components/RelationshipMap';
 import MarketingAdvisor from './components/MarketingAdvisor';
 import Settings from './components/Settings';
-import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus } from 'lucide-react';
+import { initFirebase, subscribeToData, saveToFirebase, isFirebaseInitialized } from './services/firebase';
+import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, CheckCircle, Cloud, CloudOff } from 'lucide-react';
 
 enum Tab {
   DASHBOARD = 'tableau_de_bord',
@@ -18,8 +19,9 @@ enum Tab {
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
+  const [cloudConnected, setCloudConnected] = useState(false);
 
-  // --- State Initialization with LocalStorage ---
+  // --- State Initialization ---
 
   const [tenants, setTenants] = useState<Tenant[]>(() => {
     const saved = localStorage.getItem('resimap_tenants');
@@ -39,8 +41,48 @@ const App: React.FC = () => {
   // State for Data View sub-tab
   const [dataViewMode, setDataViewMode] = useState<PersonStatus>(PersonStatus.TENANT);
 
-  // --- Persistence Effects ---
+  // --- Cloud Logic ---
 
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('resimap_firebase_config');
+    if (savedConfig) {
+      try {
+        const config = JSON.parse(savedConfig);
+        if (initFirebase(config)) {
+          setCloudConnected(true);
+        }
+      } catch (e) {
+        console.error("Invalid cloud config in local storage");
+      }
+    }
+  }, []);
+
+  // Listen for Cloud Updates
+  useEffect(() => {
+    if (!cloudConnected) return;
+
+    const unsubTenants = subscribeToData('tenants', (data) => {
+      if (data) setTenants(data);
+    });
+    
+    const unsubConfig = subscribeToData('config', (data) => {
+      if (data) setResidenceConfig(data);
+    });
+    
+    const unsubOrigins = subscribeToData('origins', (data) => {
+      if (data) setOriginOptions(data);
+    });
+
+    return () => {
+      unsubTenants();
+      unsubConfig();
+      unsubOrigins();
+    };
+  }, [cloudConnected]);
+
+  // --- Persistence Logic (Hybrid) ---
+
+  // Save to LocalStorage (Always acts as cache)
   useEffect(() => {
     localStorage.setItem('resimap_tenants', JSON.stringify(tenants));
   }, [tenants]);
@@ -53,24 +95,53 @@ const App: React.FC = () => {
     localStorage.setItem('resimap_origins', JSON.stringify(originOptions));
   }, [originOptions]);
 
-  // --- Handlers ---
+  // --- Handlers (With Cloud Sync) ---
+
+  const handleCloudConnect = (config: FirebaseConfig) => {
+    if (initFirebase(config)) {
+      setCloudConnected(true);
+      localStorage.setItem('resimap_firebase_config', JSON.stringify(config));
+      alert("Connexion au Cloud réussie ! Les données vont se synchroniser.");
+      
+      // If we are just connecting, we might want to push current local data to cloud if cloud is empty?
+      // For simplicity, we assume we want to push our current state to initialize the cloud
+      // if it's the first time.
+      saveToFirebase('tenants', tenants);
+      saveToFirebase('config', residenceConfig);
+      saveToFirebase('origins', originOptions);
+    } else {
+      alert("Échec de connexion. Vérifiez la configuration.");
+    }
+  };
+
+  const handleCloudDisconnect = () => {
+    setCloudConnected(false);
+    localStorage.removeItem('resimap_firebase_config');
+    window.location.reload(); // Reload to clear firebase instance cleanly
+  };
 
   const addTenant = (newTenant: Tenant) => {
-    setTenants(prev => [...prev, newTenant]);
+    const updated = [...tenants, newTenant];
+    setTenants(updated); // Optimistic UI
+    if (cloudConnected) saveToFirebase('tenants', updated);
   };
 
   const deleteTenant = (id: string) => {
     if (window.confirm("Êtes-vous sûr de vouloir supprimer cette fiche ?")) {
-      setTenants(prev => prev.filter(t => t.id !== id));
+      const updated = tenants.filter(t => t.id !== id);
+      setTenants(updated);
+      if (cloudConnected) saveToFirebase('tenants', updated);
     }
   };
 
   const updateConfig = (newConfig: ResidenceConfig[]) => {
     setResidenceConfig(newConfig);
+    if (cloudConnected) saveToFirebase('config', newConfig);
   };
 
   const updateOriginOptions = (newOptions: OriginOptions) => {
     setOriginOptions(newOptions);
+    if (cloudConnected) saveToFirebase('origins', newOptions);
   };
 
   const handleResetAll = () => {
@@ -78,19 +149,33 @@ const App: React.FC = () => {
       setTenants(MOCK_TENANTS);
       setResidenceConfig(DEFAULT_RESIDENCE_CONFIG);
       setOriginOptions(DEFAULT_ORIGIN_OPTIONS);
-      // Force clear localStorage keys to be safe
+      
+      if (cloudConnected) {
+        saveToFirebase('tenants', MOCK_TENANTS);
+        saveToFirebase('config', DEFAULT_RESIDENCE_CONFIG);
+        saveToFirebase('origins', DEFAULT_ORIGIN_OPTIONS);
+      }
+
       localStorage.removeItem('resimap_tenants');
       localStorage.removeItem('resimap_config');
       localStorage.removeItem('resimap_origins');
     }
   };
 
-  // Function to handle importing data from a JSON file
   const handleImportData = (data: any) => {
     try {
-      if (data.tenants) setTenants(data.tenants);
-      if (data.config) setResidenceConfig(data.config);
-      if (data.origins) setOriginOptions(data.origins);
+      if (data.tenants) {
+        setTenants(data.tenants);
+        if (cloudConnected) saveToFirebase('tenants', data.tenants);
+      }
+      if (data.config) {
+        setResidenceConfig(data.config);
+        if (cloudConnected) saveToFirebase('config', data.config);
+      }
+      if (data.origins) {
+        setOriginOptions(data.origins);
+        if (cloudConnected) saveToFirebase('origins', data.origins);
+      }
       alert("Données importées avec succès !");
     } catch (e) {
       console.error(e);
@@ -179,24 +264,39 @@ const App: React.FC = () => {
               {activeTab === Tab.DATA && 'Gestion des Données'}
               {activeTab === Tab.SETTINGS && 'Paramètres Généraux'}
             </h1>
-            <p className="text-slate-500 mt-1">
-              Gérez vos 4 résidences et analysez vos cibles.
+            <p className="text-slate-500 mt-1 flex items-center gap-2">
+              <span>Gérez vos 4 résidences et analysez vos cibles.</span>
             </p>
           </div>
           
-          <div className="hidden md:flex items-center gap-3">
-            <span className="bg-white px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-600 shadow-sm flex gap-2">
-              <span className="text-indigo-600">{activeTenants.length} Locataires</span>
-              <span className="text-slate-300">|</span>
-              <span className="text-amber-600">{prospects.length} Contacts</span>
-            </span>
-            <button 
-              onClick={() => setActiveTab(Tab.DATA)}
-              className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Nouveau
-            </button>
+          <div className="hidden md:flex flex-col items-end gap-2">
+             {/* Save Indicator */}
+             {cloudConnected ? (
+               <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100 shadow-sm animate-pulse">
+                  <Cloud className="w-3.5 h-3.5" />
+                  Synchronisé (Cloud)
+               </div>
+             ) : (
+               <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
+                  <CloudOff className="w-3.5 h-3.5" />
+                  Mode Local (Non partagé)
+               </div>
+             )}
+
+            <div className="flex items-center gap-3">
+              <span className="bg-white px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-600 shadow-sm flex gap-2">
+                <span className="text-indigo-600">{activeTenants.length} Locataires</span>
+                <span className="text-slate-300">|</span>
+                <span className="text-amber-600">{prospects.length} Contacts</span>
+              </span>
+              <button 
+                onClick={() => setActiveTab(Tab.DATA)}
+                className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Nouveau
+              </button>
+            </div>
           </div>
         </header>
 
@@ -231,6 +331,9 @@ const App: React.FC = () => {
                  onResetAll={handleResetAll}
                  tenants={tenants}
                  onImportData={handleImportData}
+                 onConnectCloud={handleCloudConnect}
+                 onDisconnectCloud={handleCloudDisconnect}
+                 isCloudConnected={cloudConnected}
                />
             </div>
           )}
