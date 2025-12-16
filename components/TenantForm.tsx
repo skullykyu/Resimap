@@ -42,7 +42,8 @@ const TenantForm: React.FC<TenantFormProps> = ({ onAddTenant, residenceConfig, o
       originName: finalOriginName,
       originType,
       studyYear,
-      duration: duration || undefined,
+      // Use the string value directly (even if empty) to satisfy Firebase
+      duration: duration, 
       status: status
     };
 

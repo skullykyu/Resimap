@@ -54,7 +54,13 @@ export const subscribeToData = (path: string, callback: (data: any) => void, onE
 
 export const saveToFirebase = (path: string, data: any): Promise<void> => {
   if (!db) return Promise.reject("Base de données non initialisée");
-  return set(ref(db, path), data);
+  
+  // FIX CRITIQUE : Firebase rejette les valeurs 'undefined'.
+  // On utilise JSON.stringify/parse pour nettoyer l'objet (supprime les clés undefined)
+  // avant de l'envoyer. C'est une méthode robuste pour éviter le crash "set failed".
+  const cleanData = data === undefined ? null : JSON.parse(JSON.stringify(data));
+
+  return set(ref(db, path), cleanData);
 };
 
 export const isFirebaseInitialized = () => !!db;
