@@ -48,19 +48,34 @@ const Settings: React.FC<SettingsProps> = ({
   const [firebaseConfigInput, setFirebaseConfigInput] = useState('');
   const [showCloudForm, setShowCloudForm] = useState(false);
 
+  // Load existing config into input for viewing
   useEffect(() => {
     const savedConfig = localStorage.getItem('resimap_firebase_config');
     if (savedConfig) {
       try {
-        setFirebaseConfigInput(JSON.stringify(JSON.parse(savedConfig), null, 2));
+        const parsed = JSON.parse(savedConfig);
+        setFirebaseConfigInput(JSON.stringify(parsed, null, 2));
       } catch (e) {
         setFirebaseConfigInput(savedConfig);
       }
+    } else {
+        // Warning: This is the hardcoded default
+        setFirebaseConfigInput("// Vous utilisez la configuration par défaut (DÉMO).\n// Pour activer le partage réel, créez un projet Firebase et collez votre config ici.");
     }
-  }, []);
+  }, [isCloudConnected]);
   
   // File Import Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check if using default bad config
+  const isDemoConfig = (() => {
+    const saved = localStorage.getItem('resimap_firebase_config');
+    if (!saved) return true; // Default is demo
+    try {
+        const parsed = JSON.parse(saved);
+        return parsed.projectId === 'resimap63000';
+    } catch { return false; }
+  })();
 
   const addSchool = () => {
     if (newSchool.trim()) {
@@ -93,38 +108,45 @@ const Settings: React.FC<SettingsProps> = ({
   const handleConnect = () => {
     try {
       let input = firebaseConfigInput.trim();
-      const configMatch = input.match(/firebaseConfig\s*=\s*({[\s\S]*?})(?:;|$)/);
-      if (configMatch && configMatch[1]) {
-        input = configMatch[1];
-      } else {
-        const firstBrace = input.indexOf('{');
-        const lastBrace = input.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1) {
-          input = input.substring(firstBrace, lastBrace + 1);
+      // Simple cleaning of JS object syntax to JSON if needed
+      if (!input.startsWith('{')) {
+        const configMatch = input.match(/firebaseConfig\s*=\s*({[\s\S]*?})(?:;|$)/);
+        if (configMatch && configMatch[1]) {
+           input = configMatch[1];
+        } else {
+            // Try finding first brace
+            const firstBrace = input.indexOf('{');
+            const lastBrace = input.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1) {
+              input = input.substring(firstBrace, lastBrace + 1);
+            }
         }
       }
 
+      // Allow loose JSON (keys without quotes) via Function constructor
       let configObj;
       try {
+        // Security note: In a real app, use a safer parser. Here we assume user is admin.
         configObj = new Function('return ' + input)();
       } catch (e) {
-        throw new Error("Impossible de lire la configuration.");
+        // Fallback to JSON parse
+        try {
+            configObj = JSON.parse(input);
+        } catch (jsonErr) {
+            throw new Error("Format invalide. Assurez-vous d'avoir un objet JSON ou JS valide.");
+        }
       }
 
       if (!configObj.apiKey || !configObj.projectId) {
-         alert("La configuration semble incomplète.");
+         alert("La configuration semble incomplète (manque apiKey ou projectId).");
          return;
       }
       
-      if (!configObj.databaseURL) {
-        const euUrl = `https://${configObj.projectId}-default-rtdb.europe-west1.firebasedatabase.app`;
-        configObj.databaseURL = euUrl;
-      }
-
       onConnectCloud(configObj);
-    } catch (e) {
+      setShowCloudForm(false);
+    } catch (e: any) {
       console.error(e);
-      alert("Erreur de lecture du code.");
+      alert("Erreur de lecture : " + e.message);
     }
   };
 
@@ -221,10 +243,30 @@ const Settings: React.FC<SettingsProps> = ({
           {isCloudConnected ? (
             <div className="flex flex-col gap-6">
               
-              <div className="bg-white p-4 rounded-lg border border-indigo-100 text-sm text-indigo-800">
-                <p><strong>Tout est opérationnel !</strong></p>
-                <p className="mt-2">Si votre collègue ne voit pas vos données, c'est probablement car la base de données était vide au moment de la connexion. Cliquez sur le bouton ci-dessous pour envoyer vos données actuelles.</p>
-              </div>
+              {isDemoConfig && (
+                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                      <AlertOctagon className="h-5 w-5 text-amber-600" aria-hidden="true" />
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-amber-800">
+                        Attention : Mode Démonstration
+                      </h3>
+                      <div className="mt-2 text-sm text-amber-700">
+                        <p>
+                          Vous utilisez actuellement la configuration par défaut (Projet ID: resimap63000). 
+                          Il est très probable que cette base de données n'existe pas ou soit en lecture seule.
+                          Vos données ne seront PAS partagées avec votre collègue.
+                        </p>
+                        <p className="mt-2 font-bold">
+                          Solution : Créez un projet sur <a href="https://console.firebase.google.com" target="_blank" className="underline" rel="noreferrer">Firebase Console</a> et copiez votre propre configuration ci-dessous.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-4 items-center flex-wrap">
                  <button 
@@ -235,17 +277,41 @@ const Settings: React.FC<SettingsProps> = ({
                   Forcer l'envoi de MES données vers le Cloud
                 </button>
                 <p className="text-xs text-slate-500 italic max-w-sm">
-                  À utiliser uniquement si les autres utilisateurs ne voient pas vos modifications.
+                  À utiliser si votre collègue ne voit pas vos changements.
                 </p>
               </div>
 
               <div className="border-t border-indigo-100 pt-4 mt-2">
                 <button 
-                  onClick={onDisconnectCloud}
-                  className="text-red-500 hover:text-red-700 text-sm font-medium underline"
+                  onClick={() => setShowCloudForm(!showCloudForm)}
+                  className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1"
                 >
-                  Déconnecter / Changer de configuration
+                  {showCloudForm ? 'Masquer la configuration' : 'Voir / Modifier la configuration technique'}
                 </button>
+                
+                {showCloudForm && (
+                  <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                    <textarea
+                      value={firebaseConfigInput}
+                      onChange={(e) => setFirebaseConfigInput(e.target.value)}
+                      className="w-full h-40 p-3 font-mono text-xs border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-600"
+                    />
+                    <div className="flex gap-3 mt-2">
+                       <button 
+                        onClick={handleConnect}
+                        className="bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-medium"
+                      >
+                        Mettre à jour la connexion
+                      </button>
+                      <button 
+                        onClick={onDisconnectCloud}
+                        className="text-red-600 hover:text-red-700 px-4 py-2 text-sm font-medium"
+                      >
+                        Déconnexion totale
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -262,11 +328,12 @@ const Settings: React.FC<SettingsProps> = ({
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
                   <div className="text-sm text-slate-600 bg-blue-50 p-4 rounded-lg border border-blue-100">
                     <p className="font-semibold text-blue-800 mb-1">Collez votre code Firebase ici :</p>
+                    <p>Récupérez ceci dans votre console Firebase (Paramètres du projet {'>'} Général {'>'} Vos applications).</p>
                   </div>
                   <textarea
                     value={firebaseConfigInput}
                     onChange={(e) => setFirebaseConfigInput(e.target.value)}
-                    placeholder={'const firebaseConfig = { ... };'}
+                    placeholder={'const firebaseConfig = {\n  apiKey: "...",\n  authDomain: "...",\n  projectId: "...",\n  databaseURL: "..."\n};'}
                     className="w-full h-40 p-3 font-mono text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                   <div className="flex gap-3">

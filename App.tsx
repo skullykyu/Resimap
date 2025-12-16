@@ -7,7 +7,7 @@ import RelationshipMap from './components/RelationshipMap';
 import MarketingAdvisor from './components/MarketingAdvisor';
 import Settings from './components/Settings';
 import { initFirebase, subscribeToData, saveToFirebase, isFirebaseInitialized } from './services/firebase';
-import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, CheckCircle, Cloud, CloudOff, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock } from 'lucide-react';
 
 enum Tab {
   DASHBOARD = 'tableau_de_bord',
@@ -20,6 +20,9 @@ enum Tab {
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
   const [cloudConnected, setCloudConnected] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isPushing, setIsPushing] = useState(false);
 
   // --- State Initialization ---
 
@@ -44,7 +47,7 @@ const App: React.FC = () => {
   // --- Cloud Logic ---
 
   useEffect(() => {
-    // 1. Try Local Storage Config first (if user manually overrode it)
+    // 1. Try Local Storage Config first
     const savedConfig = localStorage.getItem('resimap_firebase_config');
     let configToUse: FirebaseConfig | null = null;
 
@@ -55,7 +58,7 @@ const App: React.FC = () => {
         console.error("Invalid cloud config in local storage");
       }
     } else {
-        // 2. Fallback to Embedded Config (Automatic)
+        // 2. Fallback to Embedded Config
         configToUse = EMBEDDED_FIREBASE_CONFIG;
     }
 
@@ -68,17 +71,31 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!cloudConnected) return;
 
-    const unsubTenants = subscribeToData('tenants', (data) => {
-      if (data) setTenants(data);
-    });
-    
-    const unsubConfig = subscribeToData('config', (data) => {
-      if (data) setResidenceConfig(data);
-    });
-    
-    const unsubOrigins = subscribeToData('origins', (data) => {
-      if (data) setOriginOptions(data);
-    });
+    const handleDataUpdate = (data: any, type: 'tenants' | 'config' | 'origins') => {
+      setLastSyncTime(new Date());
+      setSyncError(null); // Clear error if we successfully receive data
+      
+      if (!data) return; // Ignore null data (empty DB)
+      
+      if (type === 'tenants') setTenants(data);
+      if (type === 'config') setResidenceConfig(data);
+      if (type === 'origins') setOriginOptions(data);
+    };
+
+    const handleError = (error: any) => {
+      console.error("Sync Error:", error);
+      let msg = "Erreur de synchronisation inconnue.";
+      if (error.code === 'PERMISSION_DENIED') {
+        msg = "Permission refusée : Vérifiez les règles de sécurité de votre base Firebase.";
+      } else if (error.code === 'NETWORK_ERROR') {
+        msg = "Erreur réseau : Vérifiez votre connexion internet.";
+      }
+      setSyncError(msg);
+    };
+
+    const unsubTenants = subscribeToData('tenants', (data) => handleDataUpdate(data, 'tenants'), handleError);
+    const unsubConfig = subscribeToData('config', (data) => handleDataUpdate(data, 'config'), handleError);
+    const unsubOrigins = subscribeToData('origins', (data) => handleDataUpdate(data, 'origins'), handleError);
 
     return () => {
       unsubTenants();
@@ -89,7 +106,6 @@ const App: React.FC = () => {
 
   // --- Persistence Logic (Hybrid) ---
 
-  // Save to LocalStorage (Always acts as cache)
   useEffect(() => {
     localStorage.setItem('resimap_tenants', JSON.stringify(tenants));
   }, [tenants]);
@@ -108,27 +124,50 @@ const App: React.FC = () => {
     if (initFirebase(config)) {
       setCloudConnected(true);
       localStorage.setItem('resimap_firebase_config', JSON.stringify(config));
-      alert("Connexion au Cloud réussie ! Les données vont se synchroniser.");
+      alert("Connexion configurée. Tentative de synchronisation...");
       
-      // Initial Push
-      saveToFirebase('tenants', tenants);
-      saveToFirebase('config', residenceConfig);
-      saveToFirebase('origins', originOptions);
+      // Initial Push (optional, to seed DB if empty)
+      // We do NOT auto-push here to avoid overwriting existing cloud data immediately.
+      // We rely on 'Force Push' for the first seed.
     } else {
       alert("Échec de connexion. Vérifiez la configuration.");
     }
   };
 
-  const handleForcePushToCloud = () => {
+  const safeSave = async (path: string, data: any) => {
+    if (!cloudConnected) return;
+    try {
+      await saveToFirebase(path, data);
+      setSyncError(null);
+      setLastSyncTime(new Date());
+    } catch (e: any) {
+      console.error("Save failed", e);
+      setSyncError("Échec de l'enregistrement : " + (e.message || "Erreur inconnue"));
+    }
+  };
+
+  const handleForcePushToCloud = async () => {
     if (!cloudConnected) {
       alert("Vous n'êtes pas connecté au Cloud.");
       return;
     }
-    if (window.confirm("Cela va écraser les données du Cloud (Firebase) avec les données que VOUS voyez actuellement sur cet écran. Votre collègue verra ensuite ces données. Continuer ?")) {
-      saveToFirebase('tenants', tenants);
-      saveToFirebase('config', residenceConfig);
-      saveToFirebase('origins', originOptions);
-      alert("Données envoyées avec succès vers le serveur ! Votre collègue devrait voir la mise à jour d'ici quelques secondes.");
+    if (window.confirm("⚠️ ATTENTION : Vous allez écraser TOUTES les données du serveur avec les vôtres. Assurez-vous d'être la source de vérité. Continuer ?")) {
+      setIsPushing(true);
+      try {
+        await Promise.all([
+          saveToFirebase('tenants', tenants),
+          saveToFirebase('config', residenceConfig),
+          saveToFirebase('origins', originOptions)
+        ]);
+        alert("✅ Succès ! Vos données sont maintenant sur le serveur.");
+        setLastSyncTime(new Date());
+        setSyncError(null);
+      } catch (e: any) {
+        alert("❌ Erreur lors de l'envoi : " + e.message + "\nVérifiez que votre base de données autorise l'écriture.");
+        setSyncError("Erreur d'envoi : " + e.message);
+      } finally {
+        setIsPushing(false);
+      }
     }
   };
 
@@ -140,38 +179,38 @@ const App: React.FC = () => {
 
   const addTenant = (newTenant: Tenant) => {
     const updated = [...tenants, newTenant];
-    setTenants(updated); // Optimistic UI
-    if (cloudConnected) saveToFirebase('tenants', updated);
+    setTenants(updated); 
+    safeSave('tenants', updated);
   };
 
   const deleteTenant = (id: string) => {
     if (window.confirm("Êtes-vous sûr de vouloir supprimer cette fiche ?")) {
       const updated = tenants.filter(t => t.id !== id);
       setTenants(updated);
-      if (cloudConnected) saveToFirebase('tenants', updated);
+      safeSave('tenants', updated);
     }
   };
 
   const updateConfig = (newConfig: ResidenceConfig[]) => {
     setResidenceConfig(newConfig);
-    if (cloudConnected) saveToFirebase('config', newConfig);
+    safeSave('config', newConfig);
   };
 
   const updateOriginOptions = (newOptions: OriginOptions) => {
     setOriginOptions(newOptions);
-    if (cloudConnected) saveToFirebase('origins', newOptions);
+    safeSave('origins', newOptions);
   };
 
   const handleResetAll = () => {
-    if (window.confirm("⚠️ ATTENTION : Cela va effacer TOUTES vos données saisies et restaurer les données de démonstration. Cette action est irréversible. Continuer ?")) {
+    if (window.confirm("⚠️ ATTENTION : Cela va effacer TOUTES vos données. Continuer ?")) {
       setTenants(MOCK_TENANTS);
       setResidenceConfig(DEFAULT_RESIDENCE_CONFIG);
       setOriginOptions(DEFAULT_ORIGIN_OPTIONS);
       
       if (cloudConnected) {
-        saveToFirebase('tenants', MOCK_TENANTS);
-        saveToFirebase('config', DEFAULT_RESIDENCE_CONFIG);
-        saveToFirebase('origins', DEFAULT_ORIGIN_OPTIONS);
+        safeSave('tenants', MOCK_TENANTS);
+        safeSave('config', DEFAULT_RESIDENCE_CONFIG);
+        safeSave('origins', DEFAULT_ORIGIN_OPTIONS);
       }
 
       localStorage.removeItem('resimap_tenants');
@@ -184,20 +223,20 @@ const App: React.FC = () => {
     try {
       if (data.tenants) {
         setTenants(data.tenants);
-        if (cloudConnected) saveToFirebase('tenants', data.tenants);
+        safeSave('tenants', data.tenants);
       }
       if (data.config) {
         setResidenceConfig(data.config);
-        if (cloudConnected) saveToFirebase('config', data.config);
+        safeSave('config', data.config);
       }
       if (data.origins) {
         setOriginOptions(data.origins);
-        if (cloudConnected) saveToFirebase('origins', data.origins);
+        safeSave('origins', data.origins);
       }
       alert("Données importées avec succès !");
     } catch (e) {
       console.error(e);
-      alert("Erreur lors de l'importation du fichier. Le format est invalide.");
+      alert("Erreur lors de l'importation.");
     }
   };
 
@@ -273,61 +312,87 @@ const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 ml-20 lg:ml-64 p-4 lg:p-8 overflow-y-auto">
-        <header className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              {activeTab === Tab.DASHBOARD && 'Vue d\'ensemble'}
-              {activeTab === Tab.MAP && 'Cartographie des Relations'}
-              {activeTab === Tab.AI && 'Stratégie Marketing (Gemini)'}
-              {activeTab === Tab.DATA && 'Gestion des Données'}
-              {activeTab === Tab.SETTINGS && 'Paramètres Généraux'}
-            </h1>
-            <p className="text-slate-500 mt-1 flex items-center gap-2">
-              <span>Gérez vos 4 résidences et analysez vos cibles.</span>
-            </p>
-          </div>
-          
-          <div className="hidden md:flex flex-col items-end gap-2">
-             {/* Save Indicator */}
-             {cloudConnected ? (
-               <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100 shadow-sm animate-pulse">
-                  <Cloud className="w-3.5 h-3.5" />
-                  Synchronisé (Cloud)
-               </div>
-             ) : (
-               <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
-                  <CloudOff className="w-3.5 h-3.5" />
-                  Mode Local (Non partagé)
-               </div>
-             )}
+        <header className="flex flex-col gap-4 mb-8">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">
+                {activeTab === Tab.DASHBOARD && 'Vue d\'ensemble'}
+                {activeTab === Tab.MAP && 'Cartographie des Relations'}
+                {activeTab === Tab.AI && 'Stratégie Marketing (Gemini)'}
+                {activeTab === Tab.DATA && 'Gestion des Données'}
+                {activeTab === Tab.SETTINGS && 'Paramètres Généraux'}
+              </h1>
+              <p className="text-slate-500 mt-1 flex items-center gap-2">
+                <span>Gérez vos 4 résidences et analysez vos cibles.</span>
+              </p>
+            </div>
+            
+            <div className="hidden md:flex flex-col items-end gap-2">
+              {/* Status Bar */}
+              <div className="flex items-center gap-2">
+                {cloudConnected ? (
+                  <div className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border shadow-sm ${syncError ? 'bg-red-50 text-red-700 border-red-200' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>
+                      {syncError ? <AlertTriangle className="w-3.5 h-3.5" /> : <Cloud className="w-3.5 h-3.5" />}
+                      {syncError ? "Erreur Synchro" : "Connecté Cloud"}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
+                      <CloudOff className="w-3.5 h-3.5" />
+                      Mode Local
+                  </div>
+                )}
+                
+                {lastSyncTime && !syncError && (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <Clock className="w-3 h-3" />
+                    <span>Reçu : {lastSyncTime.toLocaleTimeString()}</span>
+                  </div>
+                )}
+              </div>
 
-            <div className="flex items-center gap-3">
-              {/* Force Push Button - Only visible when connected */}
-              {cloudConnected && (
+              <div className="flex items-center gap-3">
+                {/* Force Push Button */}
+                {cloudConnected && (
+                  <button 
+                    onClick={handleForcePushToCloud}
+                    disabled={isPushing}
+                    className={`bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 shadow-sm ${isPushing ? 'opacity-70 cursor-wait' : ''}`}
+                    title="Envoyer mes données actuelles vers le Cloud pour que les autres les voient"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isPushing ? 'animate-spin' : ''}`} />
+                    {isPushing ? 'Envoi...' : 'Forcer Synchro'}
+                  </button>
+                )}
+
+                <span className="bg-white px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-600 shadow-sm flex gap-2">
+                  <span className="text-indigo-600">{activeTenants.length} Locs.</span>
+                  <span className="text-slate-300">|</span>
+                  <span className="text-amber-600">{prospects.length} Contacts</span>
+                </span>
                 <button 
-                  onClick={handleForcePushToCloud}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 shadow-sm animate-in fade-in zoom-in duration-300"
-                  title="Envoyer mes données actuelles vers le Cloud pour que les autres les voient"
+                  onClick={() => setActiveTab(Tab.DATA)}
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2"
                 >
-                  <RefreshCw className="w-4 h-4" />
-                  Forcer Synchro
+                  <Plus className="w-4 h-4" />
+                  Nouveau
                 </button>
-              )}
-
-              <span className="bg-white px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-600 shadow-sm flex gap-2">
-                <span className="text-indigo-600">{activeTenants.length} Locataires</span>
-                <span className="text-slate-300">|</span>
-                <span className="text-amber-600">{prospects.length} Contacts</span>
-              </span>
-              <button 
-                onClick={() => setActiveTab(Tab.DATA)}
-                className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Nouveau
-              </button>
+              </div>
             </div>
           </div>
+
+          {/* Error Banner */}
+          {syncError && cloudConnected && (
+             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2 animate-in slide-in-from-top-2">
+               <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+               <div>
+                 <p className="font-bold">Problème de synchronisation détecté :</p>
+                 <p>{syncError}</p>
+                 <p className="mt-1 text-xs text-red-600 underline cursor-pointer" onClick={() => setActiveTab(Tab.SETTINGS)}>
+                    Allez dans les Paramètres pour vérifier votre configuration Firebase.
+                 </p>
+               </div>
+             </div>
+          )}
         </header>
 
         {/* Content Views */}
