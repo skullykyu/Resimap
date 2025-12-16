@@ -10,10 +10,20 @@ export enum EntityType {
   INTERNSHIP = "Stage / Entreprise"
 }
 
+export enum PersonStatus {
+  TENANT = "Locataire",
+  PROSPECT = "Nouveau Contact"
+}
+
 export interface ResidenceConfig {
   id: ResidenceID;
   name: string;
   color: string;
+}
+
+export interface OriginOptions {
+  schools: string[];
+  internships: string[];
 }
 
 export interface Tenant {
@@ -23,7 +33,9 @@ export interface Tenant {
   originName: string;
   originType: EntityType;
   studyYear: string;
-  duration?: string; // Nouveau champ optionnel pour la durée
+  duration?: string;
+  status: PersonStatus;
+  email?: string;
 }
 
 export interface ChartData {

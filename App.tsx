@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { MOCK_TENANTS, DEFAULT_RESIDENCE_CONFIG } from './constants';
-import { Tenant, ResidenceConfig } from './types';
+import React, { useState, useEffect } from 'react';
+import { MOCK_TENANTS, DEFAULT_RESIDENCE_CONFIG, DEFAULT_ORIGIN_OPTIONS } from './constants';
+import { Tenant, ResidenceConfig, PersonStatus, OriginOptions } from './types';
 import Dashboard from './components/Dashboard';
 import TenantForm from './components/TenantForm';
 import RelationshipMap from './components/RelationshipMap';
 import MarketingAdvisor from './components/MarketingAdvisor';
 import Settings from './components/Settings';
-import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon } from 'lucide-react';
+import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus } from 'lucide-react';
 
 enum Tab {
   DASHBOARD = 'tableau_de_bord',
@@ -18,19 +18,95 @@ enum Tab {
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
-  const [tenants, setTenants] = useState<Tenant[]>(MOCK_TENANTS);
-  const [residenceConfig, setResidenceConfig] = useState<ResidenceConfig[]>(DEFAULT_RESIDENCE_CONFIG);
+
+  // --- State Initialization with LocalStorage ---
+
+  const [tenants, setTenants] = useState<Tenant[]>(() => {
+    const saved = localStorage.getItem('resimap_tenants');
+    return saved ? JSON.parse(saved) : MOCK_TENANTS;
+  });
+
+  const [residenceConfig, setResidenceConfig] = useState<ResidenceConfig[]>(() => {
+    const saved = localStorage.getItem('resimap_config');
+    return saved ? JSON.parse(saved) : DEFAULT_RESIDENCE_CONFIG;
+  });
+
+  const [originOptions, setOriginOptions] = useState<OriginOptions>(() => {
+    const saved = localStorage.getItem('resimap_origins');
+    return saved ? JSON.parse(saved) : DEFAULT_ORIGIN_OPTIONS;
+  });
+  
+  // State for Data View sub-tab
+  const [dataViewMode, setDataViewMode] = useState<PersonStatus>(PersonStatus.TENANT);
+
+  // --- Persistence Effects ---
+
+  useEffect(() => {
+    localStorage.setItem('resimap_tenants', JSON.stringify(tenants));
+  }, [tenants]);
+
+  useEffect(() => {
+    localStorage.setItem('resimap_config', JSON.stringify(residenceConfig));
+  }, [residenceConfig]);
+
+  useEffect(() => {
+    localStorage.setItem('resimap_origins', JSON.stringify(originOptions));
+  }, [originOptions]);
+
+  // --- Handlers ---
 
   const addTenant = (newTenant: Tenant) => {
     setTenants(prev => [...prev, newTenant]);
+  };
+
+  const deleteTenant = (id: string) => {
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer cette fiche ?")) {
+      setTenants(prev => prev.filter(t => t.id !== id));
+    }
   };
 
   const updateConfig = (newConfig: ResidenceConfig[]) => {
     setResidenceConfig(newConfig);
   };
 
+  const updateOriginOptions = (newOptions: OriginOptions) => {
+    setOriginOptions(newOptions);
+  };
+
+  const handleResetAll = () => {
+    if (window.confirm("⚠️ ATTENTION : Cela va effacer TOUTES vos données saisies et restaurer les données de démonstration. Cette action est irréversible. Continuer ?")) {
+      setTenants(MOCK_TENANTS);
+      setResidenceConfig(DEFAULT_RESIDENCE_CONFIG);
+      setOriginOptions(DEFAULT_ORIGIN_OPTIONS);
+      // Force clear localStorage keys to be safe
+      localStorage.removeItem('resimap_tenants');
+      localStorage.removeItem('resimap_config');
+      localStorage.removeItem('resimap_origins');
+    }
+  };
+
+  // Function to handle importing data from a JSON file
+  const handleImportData = (data: any) => {
+    try {
+      if (data.tenants) setTenants(data.tenants);
+      if (data.config) setResidenceConfig(data.config);
+      if (data.origins) setOriginOptions(data.origins);
+      alert("Données importées avec succès !");
+    } catch (e) {
+      console.error(e);
+      alert("Erreur lors de l'importation du fichier. Le format est invalide.");
+    }
+  };
+
   const getResColor = (id: string) => residenceConfig.find(r => r.id === id)?.color || '#ccc';
   const getResName = (id: string) => residenceConfig.find(r => r.id === id)?.name || id;
+
+  // Filtered lists
+  const activeTenants = tenants.filter(t => t.status === PersonStatus.TENANT);
+  const prospects = tenants.filter(t => t.status === PersonStatus.PROSPECT);
+  
+  // Determine which list to show in Data View
+  const displayList = dataViewMode === PersonStatus.TENANT ? activeTenants : prospects;
 
   return (
     <div className="min-h-screen flex bg-slate-50 text-slate-900 font-sans">
@@ -109,8 +185,10 @@ const App: React.FC = () => {
           </div>
           
           <div className="hidden md:flex items-center gap-3">
-            <span className="bg-white px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-600 shadow-sm">
-              {tenants.length} Locataires Actifs
+            <span className="bg-white px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-600 shadow-sm flex gap-2">
+              <span className="text-indigo-600">{activeTenants.length} Locataires</span>
+              <span className="text-slate-300">|</span>
+              <span className="text-amber-600">{prospects.length} Contacts</span>
             </span>
             <button 
               onClick={() => setActiveTab(Tab.DATA)}
@@ -125,39 +203,77 @@ const App: React.FC = () => {
         {/* Content Views */}
         <div className="max-w-7xl mx-auto">
           
+          {/* Dashboard only uses confirmed TENANTS to avoid skewing stats */}
           {activeTab === Tab.DASHBOARD && (
-            <Dashboard tenants={tenants} residenceConfig={residenceConfig} />
+            <Dashboard tenants={activeTenants} residenceConfig={residenceConfig} />
           )}
 
+          {/* Map only uses confirmed TENANTS for now */}
           {activeTab === Tab.MAP && (
             <div className="h-[600px] animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <RelationshipMap tenants={tenants} residenceConfig={residenceConfig} />
+              <RelationshipMap tenants={activeTenants} residenceConfig={residenceConfig} />
             </div>
           )}
 
           {activeTab === Tab.AI && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <MarketingAdvisor tenants={tenants} residenceConfig={residenceConfig} />
+               <MarketingAdvisor tenants={activeTenants} residenceConfig={residenceConfig} />
             </div>
           )}
 
           {activeTab === Tab.SETTINGS && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <Settings config={residenceConfig} onUpdateConfig={updateConfig} />
+               <Settings 
+                 config={residenceConfig} 
+                 onUpdateConfig={updateConfig} 
+                 originOptions={originOptions}
+                 onUpdateOriginOptions={updateOriginOptions}
+                 onResetAll={handleResetAll}
+                 tenants={tenants}
+                 onImportData={handleImportData}
+               />
             </div>
           )}
 
           {activeTab === Tab.DATA && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="lg:col-span-1">
-                <TenantForm onAddTenant={addTenant} residenceConfig={residenceConfig} />
+                <TenantForm 
+                  onAddTenant={addTenant} 
+                  residenceConfig={residenceConfig} 
+                  originOptions={originOptions}
+                />
               </div>
               
               <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                <div className="p-4 border-b border-slate-100 bg-slate-50">
-                  <h3 className="font-semibold text-slate-800">Liste des Locataires</h3>
+                
+                {/* Sub-tabs for Tenant vs Prospect Table */}
+                <div className="flex border-b border-slate-200">
+                  <button
+                    onClick={() => setDataViewMode(PersonStatus.TENANT)}
+                    className={`flex-1 py-3 px-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${
+                      dataViewMode === PersonStatus.TENANT 
+                      ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' 
+                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    Locataires Actifs ({activeTenants.length})
+                  </button>
+                  <button
+                    onClick={() => setDataViewMode(PersonStatus.PROSPECT)}
+                    className={`flex-1 py-3 px-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${
+                      dataViewMode === PersonStatus.PROSPECT
+                      ? 'border-amber-500 text-amber-700 bg-amber-50/50' 
+                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Nouveaux Contacts ({prospects.length})
+                  </button>
                 </div>
-                <div className="overflow-x-auto">
+
+                <div className="overflow-x-auto flex-grow">
                   <table className="w-full text-left text-sm text-slate-600">
                     <thead className="bg-slate-50 text-slate-900 font-medium">
                       <tr>
@@ -165,18 +281,26 @@ const App: React.FC = () => {
                         <th className="px-4 py-3">Résidence</th>
                         <th className="px-4 py-3">Provenance</th>
                         <th className="px-4 py-3">Type</th>
-                        <th className="px-4 py-3">Durée</th>
+                        {dataViewMode === PersonStatus.TENANT && <th className="px-4 py-3">Durée</th>}
+                        <th className="px-4 py-3 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {[...tenants].reverse().map((t) => (
-                        <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                      {displayList.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                            Aucune donnée trouvée dans cette catégorie.
+                          </td>
+                        </tr>
+                      )}
+                      {[...displayList].reverse().map((t) => (
+                        <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
                           <td className="px-4 py-3 font-medium text-slate-900">{t.name}</td>
                           <td className="px-4 py-3">
                             <span 
                               className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border"
                               style={{ 
-                                backgroundColor: `${getResColor(t.residenceId)}20`, // 20 hex for low opacity
+                                backgroundColor: `${getResColor(t.residenceId)}20`,
                                 color: getResColor(t.residenceId),
                                 borderColor: `${getResColor(t.residenceId)}40`
                               }}
@@ -186,8 +310,19 @@ const App: React.FC = () => {
                           </td>
                           <td className="px-4 py-3">{t.originName}</td>
                           <td className="px-4 py-3 text-xs text-slate-500">{t.originType}</td>
-                          <td className="px-4 py-3 text-xs text-slate-500">
-                            {t.duration || <span className="text-slate-300 italic">N/A</span>}
+                          {dataViewMode === PersonStatus.TENANT && (
+                             <td className="px-4 py-3 text-xs text-slate-500">
+                              {t.duration || <span className="text-slate-300 italic">N/A</span>}
+                            </td>
+                          )}
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              onClick={() => deleteTenant(t.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                              title="Supprimer la fiche"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </td>
                         </tr>
                       ))}
