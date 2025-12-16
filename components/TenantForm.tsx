@@ -57,7 +57,8 @@ const TenantForm: React.FC<TenantFormProps> = ({ onAddTenant, residenceConfig, o
     setDuration('');
   };
 
-  const currentOptions = originType === EntityType.SCHOOL ? originOptions.schools : originOptions.internships;
+  // Safe fallback to [] if lists are undefined
+  const currentOptions = (originType === EntityType.SCHOOL ? originOptions.schools : originOptions.internships) || [];
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sticky top-6">

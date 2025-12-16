@@ -49,7 +49,7 @@ const Settings: React.FC<SettingsProps> = ({
     if (newSchool.trim()) {
       onUpdateOriginOptions({
         ...originOptions,
-        schools: [...originOptions.schools, newSchool.trim()].sort()
+        schools: [...(originOptions.schools || []), newSchool.trim()].sort()
       });
       setNewSchool('');
     }
@@ -59,16 +59,17 @@ const Settings: React.FC<SettingsProps> = ({
     if (newCompany.trim()) {
       onUpdateOriginOptions({
         ...originOptions,
-        internships: [...originOptions.internships, newCompany.trim()].sort()
+        internships: [...(originOptions.internships || []), newCompany.trim()].sort()
       });
       setNewCompany('');
     }
   };
 
   const removeOption = (type: 'schools' | 'internships', valueToRemove: string) => {
+    const currentList = originOptions[type] || [];
     onUpdateOriginOptions({
       ...originOptions,
-      [type]: originOptions[type].filter(item => item !== valueToRemove)
+      [type]: currentList.filter(item => item !== valueToRemove)
     });
   };
 
@@ -313,7 +314,7 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
 
             <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-              {originOptions.schools.map((school, idx) => (
+              {(originOptions.schools || []).map((school, idx) => (
                 <li key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-md group hover:bg-slate-100 transition-colors">
                   <span className="text-slate-700">{school}</span>
                   <button 
@@ -352,7 +353,7 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
 
             <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-              {originOptions.internships.map((company, idx) => (
+              {(originOptions.internships || []).map((company, idx) => (
                 <li key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-md group hover:bg-slate-100 transition-colors">
                   <span className="text-slate-700">{company}</span>
                   <button 

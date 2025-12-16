@@ -65,11 +65,18 @@ const App: React.FC = () => {
       setLastSyncTime(new Date());
       setSyncError(null); // Clear error if we successfully receive data
       
-      if (!data) return; // Ignore null data (empty DB)
+      if (!data && type !== 'origins') return; // Ignore null data for main lists unless explicitly handled
       
-      if (type === 'tenants') setTenants(data);
+      if (type === 'tenants') setTenants(data || []);
       if (type === 'config') setResidenceConfig(data);
-      if (type === 'origins') setOriginOptions(data);
+      if (type === 'origins') {
+        // PROTECTION CRITIQUE : Si 'schools' ou 'internships' est vide en base, Firebase ne renvoie rien.
+        // On force des tableaux vides [] pour éviter les crashs "map of undefined".
+        setOriginOptions({
+          schools: data?.schools || [],
+          internships: data?.internships || []
+        });
+      }
     };
 
     const handleError = (error: any) => {
