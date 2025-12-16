@@ -7,7 +7,7 @@ import RelationshipMap from './components/RelationshipMap';
 import MarketingAdvisor from './components/MarketingAdvisor';
 import Settings from './components/Settings';
 import { initFirebase, subscribeToData, saveToFirebase, isFirebaseInitialized } from './services/firebase';
-import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, CheckCircle, Cloud, CloudOff } from 'lucide-react';
+import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, CheckCircle, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 
 enum Tab {
   DASHBOARD = 'tableau_de_bord',
@@ -302,6 +302,18 @@ const App: React.FC = () => {
              )}
 
             <div className="flex items-center gap-3">
+              {/* Force Push Button - Only visible when connected */}
+              {cloudConnected && (
+                <button 
+                  onClick={handleForcePushToCloud}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 shadow-sm animate-in fade-in zoom-in duration-300"
+                  title="Envoyer mes données actuelles vers le Cloud pour que les autres les voient"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Forcer Synchro
+                </button>
+              )}
+
               <span className="bg-white px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-600 shadow-sm flex gap-2">
                 <span className="text-indigo-600">{activeTenants.length} Locataires</span>
                 <span className="text-slate-300">|</span>
