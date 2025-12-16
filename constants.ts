@@ -49,15 +49,15 @@ export const MOCK_TENANTS: Tenant[] = [
 
 export const SCHOOL_COLOR = '#6b7280';
 
-// Configuration Firebase intégrée pour éviter la saisie manuelle
+// Configuration Firebase intégrée pour éviter la saisie manuelle (Exemple Générique)
 export const EMBEDDED_FIREBASE_CONFIG = {
   apiKey: "AIzaSyBjfqf-viJEaFoMJNx63hQBNSI3OL8vbIY",
-  authDomain: "resimap63000.firebaseapp.com",
-  projectId: "resimap63000",
-  storageBucket: "resimap63000.firebasestorage.app",
+  authDomain: "resimap-demo-generic.firebaseapp.com",
+  projectId: "resimap-demo-generic", // Changed from resimap63000 to avoid conflict with user's real project
+  storageBucket: "resimap-demo-generic.firebasestorage.app",
   messagingSenderId: "660641960588",
   appId: "1:660641960588:web:60b267fd71b4720db161a9",
   measurementId: "G-DRLR3D84YS",
   // URL Standard Europe (West 1)
-  databaseURL: "https://resimap63000-default-rtdb.europe-west1.firebasedatabase.app"
+  databaseURL: "https://resimap-demo-generic-default-rtdb.europe-west1.firebasedatabase.app"
 };

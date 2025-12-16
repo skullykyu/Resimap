@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ResidenceConfig, ResidenceID, OriginOptions, Tenant, FirebaseConfig } from '../types';
-import { Settings as SettingsIcon, Trash2, Plus, School, Building, AlertOctagon, Download, Upload, FileJson, Copy, Check, Info, Cloud, Wifi, WifiOff, RefreshCw, ExternalLink, MousePointerClick, XCircle, CheckCircle } from 'lucide-react';
+import { Settings as SettingsIcon, Trash2, Plus, School, Building, AlertOctagon, Download, Upload, FileJson, Copy, Check, Info, Cloud, Wifi, WifiOff, RefreshCw, ExternalLink, MousePointerClick, CheckCircle, Eraser } from 'lucide-react';
 
 interface SettingsProps {
   config: ResidenceConfig[];
@@ -50,8 +50,9 @@ const Settings: React.FC<SettingsProps> = ({
     if (!saved) return true; // Default is demo
     try {
         const parsed = JSON.parse(saved);
-        // Assuming the demo project ID is what we hardcoded in constants
-        return parsed.projectId === 'resimap63000';
+        // We now consider 'resimap63000' as a valid user project, not a demo one.
+        // Changing check to a generic placeholder just in case.
+        return parsed.projectId === 'resimap-demo-generic';
     } catch { return false; }
   })();
 
@@ -60,8 +61,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [showCloudForm, setShowCloudForm] = useState(false);
   
   // LIVE VALIDATION
-  const isInputForbidden = firebaseConfigInput.includes('resimap63000');
-  const isInputValidLooking = firebaseConfigInput.includes('projectId') && !isInputForbidden && firebaseConfigInput.includes('apiKey');
+  const isInputValidLooking = firebaseConfigInput.includes('projectId') && firebaseConfigInput.includes('apiKey');
 
   // Initialize form state based on demo status
   useEffect(() => {
@@ -149,12 +149,6 @@ const Settings: React.FC<SettingsProps> = ({
 
       if (!configObj.apiKey || !configObj.projectId) {
          alert("La configuration est incomplète (il manque apiKey ou projectId).");
-         return;
-      }
-
-      // SECURITY CHECK: Prevent user from pasting the demo config manually
-      if (configObj.projectId === 'resimap63000') {
-         alert("🛑 Ce code est celui de la démo publique.\n\nVous devez créer votre PROPRE projet sur Firebase pour avoir votre propre code. Suivez les instructions affichées à l'écran.");
          return;
       }
       
@@ -263,31 +257,11 @@ const Settings: React.FC<SettingsProps> = ({
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center gap-2 text-amber-900 font-bold text-lg">
                     <AlertOctagon className="w-6 h-6" />
-                    IMPORTANT : Obtenir votre code privé
+                    Configuration Requise
                   </div>
                   
                   <div className="text-sm text-amber-900">
-                     <p className="mb-2">Le code "resimap63000" est celui de la démo publique. Ne l'utilisez pas.</p>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white/50 p-4 rounded-lg border border-amber-200">
-                      <div className="space-y-2">
-                         <p className="font-bold border-b border-amber-200 pb-1">1. Ouvrir votre Projet</p>
-                         <ul className="space-y-1 list-disc list-inside pl-2">
-                           <li>Retournez sur <a href="https://console.firebase.google.com" target="_blank" className="underline font-bold inline-flex items-center gap-1" rel="noreferrer">Firebase Console <ExternalLink className="w-3 h-3" /></a></li>
-                           <li><strong>Cliquez sur le projet</strong> que vous avez déjà créé (ex: "MonImmo").</li>
-                           <li><em>(Si pas fait : Créez-en un, puis allez dans "Realtime Database" et activez le "Mode Test").</em></li>
-                         </ul>
-                      </div>
-                      <div className="space-y-2">
-                         <p className="font-bold border-b border-amber-200 pb-1">2. Retrouver le Code</p>
-                         <ul className="space-y-1 list-disc list-inside pl-2">
-                           <li>Cliquez sur la <strong>Roue dentée ⚙️</strong> (haut gauche) {'>'} Paramètres du projet.</li>
-                           <li>Descendez <strong>tout en bas</strong> de la page.</li>
-                           <li>Si vous voyez "SDK setup and configuration", cochez "Config".</li>
-                           <li>Sinon, cliquez sur le bouton rond <strong><code>{'</>'}</code></strong> pour générer le code.</li>
-                           <li><strong>Copiez le code</strong> (Vérifiez que projectId n'est PAS "resimap63000").</li>
-                         </ul>
-                      </div>
-                    </div>
+                     <p>Pour activer la sauvegarde, copiez le code de votre projet Firebase ci-dessous.</p>
                   </div>
                 </div>
               </div>
@@ -320,76 +294,67 @@ const Settings: React.FC<SettingsProps> = ({
               
               {showCloudForm && (
                 <div className="mt-2 animate-in fade-in slide-in-from-top-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                    <MousePointerClick className="w-4 h-4 text-indigo-600" />
-                    Collez votre NOUVEAU code ici (Clic droit {'>'} Coller) :
-                  </label>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-bold text-slate-700 flex items-center gap-2">
+                      <MousePointerClick className="w-4 h-4 text-indigo-600" />
+                      Collez le code de votre projet ici :
+                    </label>
+                    <button 
+                      onClick={() => setFirebaseConfigInput('')}
+                      className="text-xs flex items-center gap-1 text-slate-500 hover:text-red-600 px-2 py-1 rounded bg-slate-100 hover:bg-red-50 transition-colors"
+                    >
+                      <Eraser className="w-3 h-3" /> Effacer tout
+                    </button>
+                  </div>
+                  
                   <div className="relative">
                     <textarea
                       value={firebaseConfigInput}
                       onChange={(e) => setFirebaseConfigInput(e.target.value)}
                       className={`w-full h-48 p-3 font-mono text-xs border-2 rounded-lg focus:ring-2 outline-none shadow-inner transition-colors ${
-                        isInputForbidden 
-                          ? 'border-red-500 bg-red-50 text-red-900 focus:ring-red-500' 
-                          : isInputValidLooking 
+                        isInputValidLooking 
                             ? 'border-green-500 bg-green-50 text-green-900 focus:ring-green-500'
                             : 'border-indigo-200 bg-white text-slate-600 focus:ring-indigo-500'
                       }`}
-                      placeholder={`const firebaseConfig = {
-  apiKey: "...",
+                      placeholder={`// Le code doit ressembler à ceci :
+const firebaseConfig = {
+  apiKey: "AIza...",
   authDomain: "...",
-  projectId: "NOM_DE_VOTRE_PROJET", // << C'est ici qu'il faut vérifier !
+  projectId: "resimap63000", 
   // ...
 };`}
                     />
                     
-                    {/* Visual Feedback Badges inside Textarea area */}
-                    {isInputForbidden && (
-                      <div className="absolute top-2 right-2 flex items-center gap-1 text-xs font-bold bg-red-600 text-white px-3 py-1 rounded-full shadow-lg animate-pulse">
-                        <XCircle className="w-4 h-4" />
-                        Code Interdit (Démo)
-                      </div>
-                    )}
                     {isInputValidLooking && (
                        <div className="absolute top-2 right-2 flex items-center gap-1 text-xs font-bold bg-green-600 text-white px-3 py-1 rounded-full shadow-lg animate-in fade-in zoom-in">
                         <CheckCircle className="w-4 h-4" />
-                        Code Valide !
+                        Format Correct
                       </div>
                     )}
                   </div>
 
-                  {isInputForbidden ? (
-                    <div className="mt-2 p-3 bg-red-100 border border-red-200 rounded-lg text-red-800 text-sm font-bold flex items-start gap-2 animate-in slide-in-from-top-2">
-                      <XCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p>ATTENTION : Vous avez collé le code de démonstration (resimap63000).</p>
-                        <p className="font-normal mt-1">Regardez la ligne <code>projectId</code>. Elle doit contenir le nom de votre projet, pas "resimap63000".</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex gap-3 mt-4">
-                       <button 
-                        onClick={handleConnect}
-                        className="bg-indigo-600 text-white hover:bg-indigo-700 px-6 py-2 rounded-lg text-sm font-bold shadow-sm"
-                      >
-                        {isCloudConnected && !isDemoConfig ? 'Mettre à jour' : 'VALIDER LA CONNEXION'}
-                      </button>
+                  <div className="flex gap-3 mt-4">
                       <button 
-                        onClick={onDisconnectCloud}
-                        className="text-red-600 hover:text-red-700 px-4 py-2 text-sm font-medium border border-transparent hover:border-red-100 rounded-lg"
+                      onClick={handleConnect}
+                      className="bg-indigo-600 text-white hover:bg-indigo-700 px-6 py-2 rounded-lg text-sm font-bold shadow-sm"
+                    >
+                      {isCloudConnected && !isDemoConfig ? 'Mettre à jour' : 'VALIDER LA CONNEXION'}
+                    </button>
+                    <button 
+                      onClick={onDisconnectCloud}
+                      className="text-red-600 hover:text-red-700 px-4 py-2 text-sm font-medium border border-transparent hover:border-red-100 rounded-lg"
+                    >
+                      Déconnexion
+                    </button>
+                    {!isDemoConfig && (
+                      <button 
+                        onClick={() => setShowCloudForm(false)}
+                        className="text-slate-500 hover:text-slate-700 px-4 py-2 text-sm font-medium"
                       >
-                        Déconnexion
+                        Masquer
                       </button>
-                      {!isDemoConfig && (
-                        <button 
-                          onClick={() => setShowCloudForm(false)}
-                          className="text-slate-500 hover:text-slate-700 px-4 py-2 text-sm font-medium"
-                        >
-                          Masquer
-                        </button>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
             </div>

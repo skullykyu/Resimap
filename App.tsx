@@ -56,8 +56,8 @@ const App: React.FC = () => {
     if (savedConfig) {
       try {
         configToUse = JSON.parse(savedConfig);
-        // Check if user manually saved the demo config (shouldn't happen with new checks, but legacy cleanup)
-        if (configToUse?.projectId === 'resimap63000') {
+        // Check if using the GENERIC demo
+        if (configToUse?.projectId === 'resimap-demo-generic') {
            isDemo = true;
         }
       } catch (e) {
@@ -131,7 +131,8 @@ const App: React.FC = () => {
   const handleCloudConnect = (config: FirebaseConfig) => {
     if (initFirebase(config)) {
       setCloudConnected(true);
-      setIsDemoMode(config.projectId === 'resimap63000');
+      // 'resimap63000' is now considered a valid user project, not demo.
+      setIsDemoMode(config.projectId === 'resimap-demo-generic');
       localStorage.setItem('resimap_firebase_config', JSON.stringify(config));
       alert("Connexion configurée. Tentative de synchronisation...");
       window.location.reload(); // Reload to ensure clean state
