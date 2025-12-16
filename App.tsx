@@ -7,7 +7,7 @@ import RelationshipMap from './components/RelationshipMap';
 import MarketingAdvisor from './components/MarketingAdvisor';
 import Settings from './components/Settings';
 import { initFirebase, subscribeToData, saveToFirebase, isFirebaseInitialized } from './services/firebase';
-import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock, Lock, Globe } from 'lucide-react';
+import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock, Lock, Globe, Users2 } from 'lucide-react';
 
 enum Tab {
   DASHBOARD = 'tableau_de_bord',
@@ -20,7 +20,6 @@ enum Tab {
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
   const [cloudConnected, setCloudConnected] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isPushing, setIsPushing] = useState(false);
@@ -28,6 +27,7 @@ const App: React.FC = () => {
   // --- State Initialization ---
 
   const [tenants, setTenants] = useState<Tenant[]>(() => {
+    // Try local storage for instant load, will be overwritten by cloud sync immediately
     const saved = localStorage.getItem('resimap_tenants');
     return saved ? JSON.parse(saved) : MOCK_TENANTS;
   });
@@ -45,33 +45,15 @@ const App: React.FC = () => {
   // State for Data View sub-tab
   const [dataViewMode, setDataViewMode] = useState<PersonStatus>(PersonStatus.TENANT);
 
-  // --- Cloud Logic ---
+  // --- Cloud Logic (Auto-Connect) ---
 
   useEffect(() => {
-    // 1. Try Local Storage Config first
-    const savedConfig = localStorage.getItem('resimap_firebase_config');
-    let configToUse: FirebaseConfig | null = null;
-    let isDemo = false;
-
-    if (savedConfig) {
-      try {
-        configToUse = JSON.parse(savedConfig);
-        // Check if using the GENERIC demo
-        if (configToUse?.projectId === 'resimap-demo-generic') {
-           isDemo = true;
-        }
-      } catch (e) {
-        console.error("Invalid cloud config in local storage");
-      }
-    } else {
-        // 2. Fallback to Embedded Config
-        configToUse = EMBEDDED_FIREBASE_CONFIG;
-        isDemo = true;
-    }
+    // Force connection using the embedded config for Shared Mode
+    const configToUse = EMBEDDED_FIREBASE_CONFIG;
 
     if (configToUse && initFirebase(configToUse)) {
         setCloudConnected(true);
-        setIsDemoMode(isDemo);
+        console.log("Mode Partagé : Connecté à", configToUse.projectId);
     }
   }, []);
 
@@ -94,7 +76,7 @@ const App: React.FC = () => {
       console.error("Sync Error:", error);
       let msg = "Erreur de synchronisation inconnue.";
       if (error.code === 'PERMISSION_DENIED') {
-        msg = "Permission refusée : Vérifiez les règles de sécurité de votre base Firebase.";
+        msg = "Accès refusé. Avez-vous mis les règles de la base de données sur 'true' ?";
       } else if (error.code === 'NETWORK_ERROR') {
         msg = "Erreur réseau : Vérifiez votre connexion internet.";
       }
@@ -128,25 +110,18 @@ const App: React.FC = () => {
 
   // --- Handlers (With Cloud Sync) ---
 
+  // Needed for Settings component interface, even if we auto-connect
   const handleCloudConnect = (config: FirebaseConfig) => {
-    if (initFirebase(config)) {
-      setCloudConnected(true);
-      // 'resimap63000' is now considered a valid user project, not demo.
-      setIsDemoMode(config.projectId === 'resimap-demo-generic');
-      localStorage.setItem('resimap_firebase_config', JSON.stringify(config));
-      alert("Connexion configurée. Tentative de synchronisation...");
-      window.location.reload(); // Reload to ensure clean state
-    } else {
-      alert("Échec de connexion. Vérifiez la configuration.");
-    }
+     // No-op in shared mode usually, but allow override if needed
+     if (initFirebase(config)) {
+       setCloudConnected(true);
+       window.location.reload();
+     }
   };
 
   const safeSave = async (path: string, data: any) => {
     if (!cloudConnected) return;
     
-    // Optional: Warn if trying to save to demo in production context
-    // if (isDemoMode) console.warn("Saving to public demo database");
-
     try {
       await saveToFirebase(path, data);
       setSyncError(null);
@@ -158,15 +133,9 @@ const App: React.FC = () => {
   };
 
   const handleForcePushToCloud = async () => {
-    if (!cloudConnected) {
-      alert("Vous n'êtes pas connecté au Cloud.");
-      return;
-    }
-    if (isDemoMode) {
-      alert("⚠️ ATTENTION : Vous êtes en MODE DÉMO PUBLIC.\n\nTout le monde verra ces données. Pour un usage professionnel, configurez votre propre base Firebase dans les Paramètres.");
-    }
+    if (!cloudConnected) return;
     
-    if (window.confirm("⚠️ ATTENTION : Vous allez écraser TOUTES les données du serveur avec les vôtres. Assurez-vous d'être la source de vérité. Continuer ?")) {
+    if (window.confirm("⚠️ ATTENTION : Vous allez écraser les données partagées avec votre version locale. Continuer ?")) {
       setIsPushing(true);
       try {
         await Promise.all([
@@ -174,11 +143,11 @@ const App: React.FC = () => {
           saveToFirebase('config', residenceConfig),
           saveToFirebase('origins', originOptions)
         ]);
-        alert("✅ Succès ! Vos données sont maintenant sur le serveur.");
+        alert("✅ Succès ! Données mises à jour pour tout le monde.");
         setLastSyncTime(new Date());
         setSyncError(null);
       } catch (e: any) {
-        alert("❌ Erreur lors de l'envoi : " + e.message + "\nVérifiez que votre base de données autorise l'écriture.");
+        alert("❌ Erreur : " + e.message);
         setSyncError("Erreur d'envoi : " + e.message);
       } finally {
         setIsPushing(false);
@@ -187,9 +156,8 @@ const App: React.FC = () => {
   };
 
   const handleCloudDisconnect = () => {
-    localStorage.removeItem('resimap_firebase_config');
-    setCloudConnected(false);
-    setIsDemoMode(true); // Revert to demo default
+    // In shared mode, "disconnect" just reloads, but since it's hardcoded it will reconnect.
+    // We could implement a "Go Offline" mode if needed, but for now simple reload.
     window.location.reload(); 
   };
 
@@ -200,7 +168,7 @@ const App: React.FC = () => {
   };
 
   const deleteTenant = (id: string) => {
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer cette fiche ?")) {
+    if (window.confirm("Supprimer cette fiche définitivement pour tout le monde ?")) {
       const updated = tenants.filter(t => t.id !== id);
       setTenants(updated);
       safeSave('tenants', updated);
@@ -218,7 +186,7 @@ const App: React.FC = () => {
   };
 
   const handleResetAll = () => {
-    if (window.confirm("⚠️ ATTENTION : Cela va effacer TOUTES vos données. Continuer ?")) {
+    if (window.confirm("⚠️ ATTENTION : Cela va effacer TOUTES les données partagées. Êtes-vous certain ?")) {
       setTenants(MOCK_TENANTS);
       setResidenceConfig(DEFAULT_RESIDENCE_CONFIG);
       setOriginOptions(DEFAULT_ORIGIN_OPTIONS);
@@ -228,10 +196,6 @@ const App: React.FC = () => {
         safeSave('config', DEFAULT_RESIDENCE_CONFIG);
         safeSave('origins', DEFAULT_ORIGIN_OPTIONS);
       }
-
-      localStorage.removeItem('resimap_tenants');
-      localStorage.removeItem('resimap_config');
-      localStorage.removeItem('resimap_origins');
     }
   };
 
@@ -347,28 +311,21 @@ const App: React.FC = () => {
               {/* Status Bar */}
               <div className="flex items-center gap-2">
                 {cloudConnected ? (
-                  isDemoMode ? (
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200 shadow-sm animate-pulse">
-                      <Globe className="w-3.5 h-3.5" />
-                      Mode Démo (Public)
+                   <div className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border shadow-sm ${syncError ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                        {syncError ? <AlertTriangle className="w-3.5 h-3.5" /> : <Users2 className="w-3.5 h-3.5" />}
+                        {syncError ? "Erreur Synchro" : "Site Partagé (En Ligne)"}
                     </div>
-                  ) : (
-                    <div className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border shadow-sm ${syncError ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                        {syncError ? <AlertTriangle className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-                        {syncError ? "Erreur Synchro" : "Cloud Privé"}
-                    </div>
-                  )
                 ) : (
                   <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
                       <CloudOff className="w-3.5 h-3.5" />
-                      Mode Local
+                      Mode Hors-Ligne
                   </div>
                 )}
                 
                 {lastSyncTime && !syncError && (
                   <div className="flex items-center gap-1.5 text-xs text-slate-400">
                     <Clock className="w-3 h-3" />
-                    <span>Reçu : {lastSyncTime.toLocaleTimeString()}</span>
+                    <span>Sync : {lastSyncTime.toLocaleTimeString()}</span>
                   </div>
                 )}
               </div>
@@ -380,10 +337,10 @@ const App: React.FC = () => {
                     onClick={handleForcePushToCloud}
                     disabled={isPushing}
                     className={`bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 shadow-sm ${isPushing ? 'opacity-70 cursor-wait' : ''}`}
-                    title="Envoyer mes données actuelles vers le Cloud pour que les autres les voient"
+                    title="Sauvegarder immédiatement"
                   >
                     <RefreshCw className={`w-4 h-4 ${isPushing ? 'animate-spin' : ''}`} />
-                    {isPushing ? 'Envoi...' : 'Forcer Synchro'}
+                    {isPushing ? 'Enregistrement...' : 'Sauvegarder'}
                   </button>
                 )}
 
@@ -408,28 +365,11 @@ const App: React.FC = () => {
              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2 animate-in slide-in-from-top-2">
                <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
                <div>
-                 <p className="font-bold">Problème de synchronisation détecté :</p>
+                 <p className="font-bold">Problème d'accès aux données :</p>
                  <p>{syncError}</p>
-                 <p className="mt-1 text-xs text-red-600 underline cursor-pointer" onClick={() => setActiveTab(Tab.SETTINGS)}>
-                    Allez dans les Paramètres pour vérifier votre configuration Firebase.
+                 <p className="mt-1 font-semibold underline">
+                    Action requise : Allez dans la console Firebase &gt; Build &gt; Realtime Database &gt; Règles, et mettez '.read': true et '.write': true.
                  </p>
-               </div>
-             </div>
-          )}
-          
-          {/* Demo Mode Banner (to incitate config) */}
-          {isDemoMode && cloudConnected && (
-             <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm flex items-start gap-2 animate-in slide-in-from-top-2">
-               <Globe className="w-5 h-5 flex-shrink-0 mt-0.5" />
-               <div className="flex-1">
-                 <p className="font-bold">Vous êtes en Mode Démonstration</p>
-                 <p>Les données que vous voyez sont publiques. Pour partager vos propres données avec votre collègue, vous devez connecter votre propre base de données.</p>
-                 <button 
-                   onClick={() => setActiveTab(Tab.SETTINGS)}
-                   className="mt-2 text-xs font-bold bg-amber-200 hover:bg-amber-300 text-amber-900 px-3 py-1 rounded transition-colors"
-                 >
-                   Configurer mon accès privé maintenant
-                 </button>
                </div>
              </div>
           )}
