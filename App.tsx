@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MOCK_TENANTS, DEFAULT_RESIDENCE_CONFIG, DEFAULT_ORIGIN_OPTIONS } from './constants';
+import { MOCK_TENANTS, DEFAULT_RESIDENCE_CONFIG, DEFAULT_ORIGIN_OPTIONS, EMBEDDED_FIREBASE_CONFIG } from './constants';
 import { Tenant, ResidenceConfig, PersonStatus, OriginOptions, FirebaseConfig } from './types';
 import Dashboard from './components/Dashboard';
 import TenantForm from './components/TenantForm';
@@ -44,16 +44,23 @@ const App: React.FC = () => {
   // --- Cloud Logic ---
 
   useEffect(() => {
+    // 1. Try Local Storage Config first (if user manually overrode it)
     const savedConfig = localStorage.getItem('resimap_firebase_config');
+    let configToUse: FirebaseConfig | null = null;
+
     if (savedConfig) {
       try {
-        const config = JSON.parse(savedConfig);
-        if (initFirebase(config)) {
-          setCloudConnected(true);
-        }
+        configToUse = JSON.parse(savedConfig);
       } catch (e) {
         console.error("Invalid cloud config in local storage");
       }
+    } else {
+        // 2. Fallback to Embedded Config (Automatic)
+        configToUse = EMBEDDED_FIREBASE_CONFIG;
+    }
+
+    if (configToUse && initFirebase(configToUse)) {
+        setCloudConnected(true);
     }
   }, []);
 
@@ -103,9 +110,7 @@ const App: React.FC = () => {
       localStorage.setItem('resimap_firebase_config', JSON.stringify(config));
       alert("Connexion au Cloud réussie ! Les données vont se synchroniser.");
       
-      // If we are just connecting, we might want to push current local data to cloud if cloud is empty?
-      // For simplicity, we assume we want to push our current state to initialize the cloud
-      // if it's the first time.
+      // Initial Push (optional, be careful not to overwrite if fetching first)
       saveToFirebase('tenants', tenants);
       saveToFirebase('config', residenceConfig);
       saveToFirebase('origins', originOptions);
@@ -115,9 +120,12 @@ const App: React.FC = () => {
   };
 
   const handleCloudDisconnect = () => {
-    setCloudConnected(false);
+    // If we disconnect, we remove the LOCAL override. 
+    // But since we have embedded config, it might reconnect automatically on refresh unless we add logic to prevent it.
+    // For now, simple behavior: clear local storage override.
     localStorage.removeItem('resimap_firebase_config');
-    window.location.reload(); // Reload to clear firebase instance cleanly
+    setCloudConnected(false);
+    window.location.reload(); 
   };
 
   const addTenant = (newTenant: Tenant) => {

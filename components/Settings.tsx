@@ -49,7 +49,11 @@ const Settings: React.FC<SettingsProps> = ({
   useEffect(() => {
     const savedConfig = localStorage.getItem('resimap_firebase_config');
     if (savedConfig) {
-      setFirebaseConfigInput(savedConfig);
+      try {
+        setFirebaseConfigInput(JSON.stringify(JSON.parse(savedConfig), null, 2));
+      } catch (e) {
+        setFirebaseConfigInput(savedConfig);
+      }
     }
   }, []);
   
@@ -86,29 +90,52 @@ const Settings: React.FC<SettingsProps> = ({
   // --- Cloud Logic ---
   const handleConnect = () => {
     try {
-      // Try to parse JSON from input (user might paste full object)
-      // Or handle loose format if needed. Assuming JSON for now.
-      const cleanInput = firebaseConfigInput.replace(/const firebaseConfig =/g, '').replace(/;/g, '').trim();
-      
-      // If user pasted just the object content without braces? unlikely but possible.
-      // Let's assume they paste the object: { apiKey: "...", ... }
-      // Using new Function to parse simplified JS object notation if JSON.parse fails is risky but helpful for copy-paste from docs
-      // Safe approach: JSON.parse requires strict quotes.
-      
-      // Let's try to make it user friendly.
+      let input = firebaseConfigInput.trim();
+
+      // 1. Nettoyage intelligent : On cherche l'objet { ... } à l'intérieur du texte collé
+      const configMatch = input.match(/firebaseConfig\s*=\s*({[\s\S]*?})(?:;|$)/);
+      if (configMatch && configMatch[1]) {
+        input = configMatch[1];
+      } else {
+        // Si on ne trouve pas "const...", on essaie de trouver juste le premier { et le dernier }
+        const firstBrace = input.indexOf('{');
+        const lastBrace = input.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          input = input.substring(firstBrace, lastBrace + 1);
+        }
+      }
+
+      // 2. Parsing souple
       let configObj;
       try {
-          configObj = JSON.parse(cleanInput);
+        configObj = new Function('return ' + input)();
       } catch (e) {
-          // Fallback: simple eval-like parsing for JS object string (risky in prod, ok for this tool)
-          // better: ask user to paste valid JSON.
-          alert("Erreur de format. Assurez-vous de coller un objet JSON valide (avec des guillemets doubles pour les clés).");
-          return;
+        throw new Error("Impossible de lire la configuration. Vérifiez que vous avez copié tout le bloc.");
+      }
+
+      // 3. Vérification des champs requis
+      if (!configObj.apiKey || !configObj.projectId) {
+         alert("La configuration semble incomplète. Il manque l'apiKey ou le projectId.");
+         return;
       }
       
+      // 4. Ajout automatique de databaseURL si manquante (cas fréquent)
+      if (!configObj.databaseURL) {
+        // Tentative de deviner l'URL pour l'Europe (West 1 - Belgique) car utilisateur francophone
+        const euUrl = `https://${configObj.projectId}-default-rtdb.europe-west1.firebasedatabase.app`;
+        // Fallback pour US (Legacy)
+        const usUrl = `https://${configObj.projectId}.firebaseio.com`;
+
+        // On assigne l'URL Europe par défaut
+        configObj.databaseURL = euUrl;
+
+        alert(`Info : Votre code Firebase ne contenait pas l'adresse de la base de données.\n\nJ'ai ajouté automatiquement l'adresse standard pour l'Europe :\n${euUrl}\n\nSi la connexion échoue (message d'erreur rouge), c'est que votre base est peut-être aux USA. Dans ce cas, contactez le support.`);
+      }
+
       onConnectCloud(configObj);
     } catch (e) {
-      alert("Erreur de configuration. Vérifiez le format.");
+      console.error(e);
+      alert("Erreur de lecture du code. Assurez-vous d'avoir copié tout le bloc 'const firebaseConfig = { ... };'");
     }
   };
 
@@ -209,10 +236,21 @@ const Settings: React.FC<SettingsProps> = ({
                 <p className="mt-2">Pour que vos collègues accèdent aux mêmes données :</p>
                 <ol className="list-decimal ml-5 mt-1 space-y-1">
                   <li>Envoyez-leur le lien de cette application (Netlify).</li>
-                  <li>Donnez-leur la configuration JSON ci-dessous.</li>
-                  <li>Ils doivent la coller dans cet onglet sur leur ordinateur.</li>
+                  <li>Donnez-leur la configuration ci-dessous.</li>
                 </ol>
               </div>
+              
+              <div className="relative">
+                <textarea
+                    readOnly
+                    value={firebaseConfigInput}
+                    className="w-full h-24 p-3 font-mono text-xs border border-indigo-200 bg-indigo-50/50 rounded-lg text-indigo-800 focus:outline-none"
+                  />
+                  <div className="absolute top-2 right-2">
+                     <button onClick={() => {navigator.clipboard.writeText(firebaseConfigInput); alert('Copié !')}} className="p-1 bg-white rounded shadow text-xs">Copier</button>
+                  </div>
+              </div>
+
               <button 
                 onClick={onDisconnectCloud}
                 className="self-start px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
@@ -232,17 +270,17 @@ const Settings: React.FC<SettingsProps> = ({
                 </button>
               ) : (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                  <div className="text-sm text-slate-600">
-                    <p className="mb-2">Collez ici l'objet de configuration fourni par la console Firebase (Project Settings {'>'} General {'>'} Your Apps {'>'} Web).</p>
-                    <p className="text-xs text-slate-400 font-mono bg-slate-50 p-2 rounded border border-slate-100">
-                      {`{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}`}
+                  <div className="text-sm text-slate-600 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <p className="font-semibold text-blue-800 mb-1">Collez votre code Firebase ici :</p>
+                    <p className="text-blue-800/80 mb-2">
+                      Copiez tout le contenu que vous avez vu (les lignes <code>import</code>, <code>const firebaseConfig</code>, etc.). Je ferai le tri automatiquement.
                     </p>
                   </div>
                   <textarea
                     value={firebaseConfigInput}
                     onChange={(e) => setFirebaseConfigInput(e.target.value)}
-                    placeholder='Collez la config ici...'
-                    className="w-full h-32 p-3 font-mono text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder={'// Import the functions...\nconst firebaseConfig = {\n  apiKey: "AIza...",\n  ...\n};'}
+                    className="w-full h-48 p-3 font-mono text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                   <div className="flex gap-3">
                     <button 
