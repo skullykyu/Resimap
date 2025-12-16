@@ -1,0 +1,5 @@
+{
+  "name": "ResiMap Etudiant",
+  "description": "Plateforme de gestion et d'analyse marketing pour résidences étudiantes. Collecte de données locataires et visualisation des flux écoles-résidences.",
+  "requestFramePermissions": []
+}
