@@ -7,7 +7,7 @@ import RelationshipMap from './components/RelationshipMap';
 import MarketingAdvisor from './components/MarketingAdvisor';
 import Settings from './components/Settings';
 import { initFirebase, subscribeToData, saveToFirebase, isFirebaseInitialized } from './services/firebase';
-import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock } from 'lucide-react';
+import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock, Lock, Globe } from 'lucide-react';
 
 enum Tab {
   DASHBOARD = 'tableau_de_bord',
@@ -20,6 +20,7 @@ enum Tab {
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
   const [cloudConnected, setCloudConnected] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isPushing, setIsPushing] = useState(false);
@@ -50,20 +51,27 @@ const App: React.FC = () => {
     // 1. Try Local Storage Config first
     const savedConfig = localStorage.getItem('resimap_firebase_config');
     let configToUse: FirebaseConfig | null = null;
+    let isDemo = false;
 
     if (savedConfig) {
       try {
         configToUse = JSON.parse(savedConfig);
+        // Check if user manually saved the demo config (shouldn't happen with new checks, but legacy cleanup)
+        if (configToUse?.projectId === 'resimap63000') {
+           isDemo = true;
+        }
       } catch (e) {
         console.error("Invalid cloud config in local storage");
       }
     } else {
         // 2. Fallback to Embedded Config
         configToUse = EMBEDDED_FIREBASE_CONFIG;
+        isDemo = true;
     }
 
     if (configToUse && initFirebase(configToUse)) {
         setCloudConnected(true);
+        setIsDemoMode(isDemo);
     }
   }, []);
 
@@ -123,12 +131,10 @@ const App: React.FC = () => {
   const handleCloudConnect = (config: FirebaseConfig) => {
     if (initFirebase(config)) {
       setCloudConnected(true);
+      setIsDemoMode(config.projectId === 'resimap63000');
       localStorage.setItem('resimap_firebase_config', JSON.stringify(config));
       alert("Connexion configurée. Tentative de synchronisation...");
-      
-      // Initial Push (optional, to seed DB if empty)
-      // We do NOT auto-push here to avoid overwriting existing cloud data immediately.
-      // We rely on 'Force Push' for the first seed.
+      window.location.reload(); // Reload to ensure clean state
     } else {
       alert("Échec de connexion. Vérifiez la configuration.");
     }
@@ -136,6 +142,10 @@ const App: React.FC = () => {
 
   const safeSave = async (path: string, data: any) => {
     if (!cloudConnected) return;
+    
+    // Optional: Warn if trying to save to demo in production context
+    // if (isDemoMode) console.warn("Saving to public demo database");
+
     try {
       await saveToFirebase(path, data);
       setSyncError(null);
@@ -151,6 +161,10 @@ const App: React.FC = () => {
       alert("Vous n'êtes pas connecté au Cloud.");
       return;
     }
+    if (isDemoMode) {
+      alert("⚠️ ATTENTION : Vous êtes en MODE DÉMO PUBLIC.\n\nTout le monde verra ces données. Pour un usage professionnel, configurez votre propre base Firebase dans les Paramètres.");
+    }
+    
     if (window.confirm("⚠️ ATTENTION : Vous allez écraser TOUTES les données du serveur avec les vôtres. Assurez-vous d'être la source de vérité. Continuer ?")) {
       setIsPushing(true);
       try {
@@ -174,6 +188,7 @@ const App: React.FC = () => {
   const handleCloudDisconnect = () => {
     localStorage.removeItem('resimap_firebase_config');
     setCloudConnected(false);
+    setIsDemoMode(true); // Revert to demo default
     window.location.reload(); 
   };
 
@@ -331,10 +346,17 @@ const App: React.FC = () => {
               {/* Status Bar */}
               <div className="flex items-center gap-2">
                 {cloudConnected ? (
-                  <div className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border shadow-sm ${syncError ? 'bg-red-50 text-red-700 border-red-200' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>
-                      {syncError ? <AlertTriangle className="w-3.5 h-3.5" /> : <Cloud className="w-3.5 h-3.5" />}
-                      {syncError ? "Erreur Synchro" : "Connecté Cloud"}
-                  </div>
+                  isDemoMode ? (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200 shadow-sm animate-pulse">
+                      <Globe className="w-3.5 h-3.5" />
+                      Mode Démo (Public)
+                    </div>
+                  ) : (
+                    <div className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border shadow-sm ${syncError ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                        {syncError ? <AlertTriangle className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                        {syncError ? "Erreur Synchro" : "Cloud Privé"}
+                    </div>
+                  )
                 ) : (
                   <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
                       <CloudOff className="w-3.5 h-3.5" />
@@ -390,6 +412,23 @@ const App: React.FC = () => {
                  <p className="mt-1 text-xs text-red-600 underline cursor-pointer" onClick={() => setActiveTab(Tab.SETTINGS)}>
                     Allez dans les Paramètres pour vérifier votre configuration Firebase.
                  </p>
+               </div>
+             </div>
+          )}
+          
+          {/* Demo Mode Banner (to incitate config) */}
+          {isDemoMode && cloudConnected && (
+             <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm flex items-start gap-2 animate-in slide-in-from-top-2">
+               <Globe className="w-5 h-5 flex-shrink-0 mt-0.5" />
+               <div className="flex-1">
+                 <p className="font-bold">Vous êtes en Mode Démonstration</p>
+                 <p>Les données que vous voyez sont publiques. Pour partager vos propres données avec votre collègue, vous devez connecter votre propre base de données.</p>
+                 <button 
+                   onClick={() => setActiveTab(Tab.SETTINGS)}
+                   className="mt-2 text-xs font-bold bg-amber-200 hover:bg-amber-300 text-amber-900 px-3 py-1 rounded transition-colors"
+                 >
+                   Configurer mon accès privé maintenant
+                 </button>
                </div>
              </div>
           )}
