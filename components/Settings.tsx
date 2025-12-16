@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ResidenceConfig, ResidenceID, OriginOptions, Tenant, FirebaseConfig } from '../types';
-import { Settings as SettingsIcon, Trash2, Plus, School, Building, Download, Upload, FileJson, Copy, Check, Cloud, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Settings as SettingsIcon, Trash2, Plus, School, Building, Download, Upload, FileJson, Copy, Check, Cloud, Wifi, WifiOff, RefreshCw, GraduationCap } from 'lucide-react';
 
 interface SettingsProps {
   config: ResidenceConfig[];
@@ -40,6 +40,7 @@ const Settings: React.FC<SettingsProps> = ({
   // Origin List Management Inputs
   const [newSchool, setNewSchool] = useState('');
   const [newCompany, setNewCompany] = useState('');
+  const [newCursus, setNewCursus] = useState(''); // New State
   const [copied, setCopied] = useState(false);
   
   // File Import Ref
@@ -65,7 +66,17 @@ const Settings: React.FC<SettingsProps> = ({
     }
   };
 
-  const removeOption = (type: 'schools' | 'internships', valueToRemove: string) => {
+  const addCursus = () => {
+    if (newCursus.trim()) {
+      onUpdateOriginOptions({
+        ...originOptions,
+        studyFields: [...(originOptions.studyFields || []), newCursus.trim()].sort()
+      });
+      setNewCursus('');
+    }
+  };
+
+  const removeOption = (type: 'schools' | 'internships' | 'studyFields', valueToRemove: string) => {
     const currentList = originOptions[type] || [];
     onUpdateOriginOptions({
       ...originOptions,
@@ -282,12 +293,12 @@ const Settings: React.FC<SettingsProps> = ({
             <School className="w-6 h-6 text-slate-700" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-800">Base de Données Écoles & Entreprises</h2>
+            <h2 className="text-xl font-bold text-slate-800">Base de Données Écoles, Entreprises & Cursus</h2>
             <p className="text-slate-500 text-sm">Gérez les listes déroulantes proposées lors de la saisie.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+        <div className="grid grid-cols-1 xl:grid-cols-3 divide-y xl:divide-y-0 xl:divide-x divide-slate-100">
           
           {/* Schools List */}
           <div className="p-6">
@@ -319,6 +330,45 @@ const Settings: React.FC<SettingsProps> = ({
                   <span className="text-slate-700">{school}</span>
                   <button 
                     onClick={() => removeOption('schools', school)}
+                    className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Cursus List (NEW) */}
+          <div className="p-6">
+            <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <GraduationCap className="w-4 h-4 text-indigo-500" />
+              Liste des Cursus
+            </h3>
+
+            <div className="flex gap-2 mb-4">
+              <input 
+                type="text" 
+                value={newCursus}
+                onChange={(e) => setNewCursus(e.target.value)}
+                placeholder="Nouveau cursus..."
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                onKeyDown={(e) => e.key === 'Enter' && addCursus()}
+              />
+              <button 
+                onClick={addCursus}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+
+            <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+              {(originOptions.studyFields || []).map((cursus, idx) => (
+                <li key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-md group hover:bg-slate-100 transition-colors">
+                  <span className="text-slate-700">{cursus}</span>
+                  <button 
+                    onClick={() => removeOption('studyFields', cursus)}
                     className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <Trash2 className="w-4 h-4" />

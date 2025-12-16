@@ -7,7 +7,7 @@ import RelationshipMap from './components/RelationshipMap';
 import MarketingAdvisor from './components/MarketingAdvisor';
 import Settings from './components/Settings';
 import { initFirebase, subscribeToData, saveToFirebase, isFirebaseInitialized } from './services/firebase';
-import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock, Lock, Globe, Users2 } from 'lucide-react';
+import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock, Lock, Globe, Users2, Pencil } from 'lucide-react';
 
 enum Tab {
   DASHBOARD = 'tableau_de_bord',
@@ -44,6 +44,9 @@ const App: React.FC = () => {
   
   // State for Data View sub-tab
   const [dataViewMode, setDataViewMode] = useState<PersonStatus>(PersonStatus.TENANT);
+  
+  // EDIT MODE STATE
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
 
   // --- Cloud Logic (Auto-Connect) ---
 
@@ -74,7 +77,8 @@ const App: React.FC = () => {
         // On force des tableaux vides [] pour éviter les crashs "map of undefined".
         setOriginOptions({
           schools: data?.schools || [],
-          internships: data?.internships || []
+          internships: data?.internships || [],
+          studyFields: data?.studyFields || DEFAULT_ORIGIN_OPTIONS.studyFields // Init Cursus too
         });
       }
     };
@@ -174,11 +178,33 @@ const App: React.FC = () => {
     safeSave('tenants', updated);
   };
 
+  const updateTenant = (updatedTenant: Tenant) => {
+    const updatedList = tenants.map(t => t.id === updatedTenant.id ? updatedTenant : t);
+    setTenants(updatedList);
+    safeSave('tenants', updatedList);
+    setEditingTenant(null); // Exit edit mode
+  };
+
+  const handleEditClick = (tenant: Tenant) => {
+    setEditingTenant(tenant);
+    // Ensure we are on the data tab to see the form
+    setActiveTab(Tab.DATA);
+    // Ensure we are viewing the correct list (Tenant vs Prospect) based on the item being edited
+    setDataViewMode(tenant.status);
+    
+    // Scroll to top of form smoothly
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const deleteTenant = (id: string) => {
     if (window.confirm("Supprimer cette fiche définitivement pour tout le monde ?")) {
       const updated = tenants.filter(t => t.id !== id);
       setTenants(updated);
       safeSave('tenants', updated);
+      
+      if (editingTenant?.id === id) {
+        setEditingTenant(null);
+      }
     }
   };
 
@@ -426,6 +452,9 @@ const App: React.FC = () => {
               <div className="lg:col-span-1">
                 <TenantForm 
                   onAddTenant={addTenant} 
+                  onUpdateTenant={updateTenant}
+                  editingTenant={editingTenant}
+                  onCancelEdit={() => setEditingTenant(null)}
                   residenceConfig={residenceConfig} 
                   originOptions={originOptions}
                 />
@@ -466,7 +495,7 @@ const App: React.FC = () => {
                         <th className="px-4 py-3">Nom</th>
                         <th className="px-4 py-3">Résidence</th>
                         <th className="px-4 py-3">Provenance</th>
-                        <th className="px-4 py-3">Type</th>
+                        <th className="px-4 py-3">Cursus</th>
                         {dataViewMode === PersonStatus.TENANT && <th className="px-4 py-3">Durée</th>}
                         <th className="px-4 py-3 text-right">Action</th>
                       </tr>
@@ -480,8 +509,11 @@ const App: React.FC = () => {
                         </tr>
                       )}
                       {[...displayList].reverse().map((t) => (
-                        <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
-                          <td className="px-4 py-3 font-medium text-slate-900">{t.name}</td>
+                        <tr key={t.id} className={`transition-colors group ${editingTenant?.id === t.id ? 'bg-indigo-50 border-l-4 border-indigo-500' : 'hover:bg-slate-50'}`}>
+                          <td className="px-4 py-3 font-medium text-slate-900">
+                             {t.name}
+                             {editingTenant?.id === t.id && <span className="ml-2 text-[10px] uppercase font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded">Édition</span>}
+                          </td>
                           <td className="px-4 py-3">
                             <span 
                               className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border"
@@ -495,20 +527,37 @@ const App: React.FC = () => {
                             </span>
                           </td>
                           <td className="px-4 py-3">{t.originName}</td>
-                          <td className="px-4 py-3 text-xs text-slate-500">{t.originType}</td>
+                          <td className="px-4 py-3">
+                            {t.cursus ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 border border-slate-200">
+                                {t.cursus}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 italic text-xs">Non renseigné</span>
+                            )}
+                          </td>
                           {dataViewMode === PersonStatus.TENANT && (
                              <td className="px-4 py-3 text-xs text-slate-500">
                               {t.duration || <span className="text-slate-300 italic">N/A</span>}
                             </td>
                           )}
                           <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() => deleteTenant(t.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
-                              title="Supprimer la fiche"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => handleEditClick(t)}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all"
+                                title="Modifier"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => deleteTenant(t.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all"
+                                title="Supprimer la fiche"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

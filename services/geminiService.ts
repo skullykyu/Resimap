@@ -11,7 +11,9 @@ const formatDataForPrompt = (tenants: Tenant[], config: ResidenceConfig[]): stri
     if (!summary[residenceName]) {
       summary[residenceName] = [];
     }
-    summary[residenceName].push(`${t.originName} (${t.originType})`);
+    // Include Cursus in the prompt data if available
+    const cursusInfo = t.cursus ? `[Filière: ${t.cursus}]` : '';
+    summary[residenceName].push(`${t.originName} (${t.originType}) ${cursusInfo}`);
   });
 
   let promptData = "Données actuelles des locataires par résidence :\n";
@@ -41,7 +43,12 @@ export const getMarketingAnalysis = async (tenants: Tenant[], config: ResidenceC
   const dataContext = formatDataForPrompt(tenants, config);
   
   const systemInstruction = `Tu es un expert en stratégie marketing immobilière spécialisé dans le logement étudiant. 
-  Ton objectif est d'analyser la provenance des étudiants (écoles, lieux de stage) pour chaque résidence et de proposer des actions concrètes (partenariats, publicité ciblée) pour optimiser le remplissage.
+  Ton objectif est d'analyser la provenance des étudiants (écoles, lieux de stage) ET leur cursus/filière pour chaque résidence.
+  
+  Utilise ces informations pour :
+  1. Identifier les "clusters" de filières (ex: une résidence attire surtout les médicaux, une autre les ingénieurs).
+  2. Proposer des actions très ciblées (ex: "Publicité ciblée sur les étudiants en Droit car ils sont nombreux dans la résidence Centre").
+  
   Sois structuré, professionnel et concis. Fais des recommandations spécifiques par résidence.`;
 
   const prompt = `Voici les données de mes 4 résidences étudiantes situées dans la même ville mais dans des secteurs différents.
@@ -49,9 +56,9 @@ export const getMarketingAnalysis = async (tenants: Tenant[], config: ResidenceC
   ${dataContext}
   
   Analyse ces flux et propose :
-  1. Une analyse rapide des profils dominants pour chaque résidence (ex: "La résidence Nord attire les ingénieurs").
+  1. Une analyse des profils dominants (Ecoles & Filières) pour chaque résidence.
   2. Deux actions marketing ciblées par résidence pour capter plus d'étudiants similaires ou diversifier.
-  3. Une suggestion de partenariat stratégique global.`;
+  3. Une suggestion de partenariat stratégique global basé sur les filières les plus représentées.`;
 
   try {
     const response = await ai.models.generateContent({

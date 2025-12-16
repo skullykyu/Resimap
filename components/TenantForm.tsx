@@ -1,14 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { Tenant, ResidenceID, EntityType, ResidenceConfig, PersonStatus, OriginOptions } from '../types';
-import { PlusCircle, Save, UserPlus, UserCheck, School, Building } from 'lucide-react';
+import { PlusCircle, Save, UserPlus, UserCheck, School, Building, GraduationCap, X, Pencil } from 'lucide-react';
 
 interface TenantFormProps {
   onAddTenant: (tenant: Tenant) => void;
+  // Modification props
+  onUpdateTenant?: (tenant: Tenant) => void;
+  editingTenant?: Tenant | null;
+  onCancelEdit?: () => void;
+  
   residenceConfig: ResidenceConfig[];
   originOptions: OriginOptions;
 }
 
-const TenantForm: React.FC<TenantFormProps> = ({ onAddTenant, residenceConfig, originOptions }) => {
+const TenantForm: React.FC<TenantFormProps> = ({ 
+  onAddTenant, 
+  onUpdateTenant,
+  editingTenant,
+  onCancelEdit,
+  residenceConfig, 
+  originOptions 
+}) => {
   const [status, setStatus] = useState<PersonStatus>(PersonStatus.TENANT);
   const [name, setName] = useState('');
   const [residenceId, setResidenceId] = useState<ResidenceID>(ResidenceID.NORTH);
@@ -18,13 +30,76 @@ const TenantForm: React.FC<TenantFormProps> = ({ onAddTenant, residenceConfig, o
   const [selectedOrigin, setSelectedOrigin] = useState(''); // Stores the select value
   const [customOrigin, setCustomOrigin] = useState('');     // Stores input value if 'OTHER'
 
+  // Cursus Management
+  const [selectedCursus, setSelectedCursus] = useState(''); 
+  const [customCursus, setCustomCursus] = useState('');
+
   const [studyYear, setStudyYear] = useState('');
   const [duration, setDuration] = useState('');
 
-  // Reset selected origin when switching type
+  // Safe fallback to [] if lists are undefined
+  const currentOptions = (originType === EntityType.SCHOOL ? originOptions.schools : originOptions.internships) || [];
+  const cursusOptions = originOptions.studyFields || [];
+
+  // --- Logic to sync state with editingTenant ---
   useEffect(() => {
-    setSelectedOrigin('');
-    setCustomOrigin('');
+    if (editingTenant) {
+      // 1. Basic Fields
+      setStatus(editingTenant.status);
+      setName(editingTenant.name);
+      setResidenceId(editingTenant.residenceId);
+      setOriginType(editingTenant.originType);
+      setStudyYear(editingTenant.studyYear);
+      setDuration(editingTenant.duration || '');
+
+      // 2. Complex Origin Logic
+      // Check if the tenant's origin exists in the predefined list for their type
+      const optionsForType = editingTenant.originType === EntityType.SCHOOL ? originOptions.schools : originOptions.internships;
+      const safeOptions = optionsForType || [];
+      
+      if (safeOptions.includes(editingTenant.originName)) {
+        setSelectedOrigin(editingTenant.originName);
+        setCustomOrigin('');
+      } else {
+        setSelectedOrigin('OTHER');
+        setCustomOrigin(editingTenant.originName);
+      }
+
+      // 3. Complex Cursus Logic
+      if (cursusOptions.includes(editingTenant.cursus)) {
+        setSelectedCursus(editingTenant.cursus);
+        setCustomCursus('');
+      } else {
+         // Handle case where cursus might be empty or custom
+         if (editingTenant.cursus) {
+           setSelectedCursus('OTHER');
+           setCustomCursus(editingTenant.cursus);
+         } else {
+           setSelectedCursus('');
+           setCustomCursus('');
+         }
+      }
+
+    } else {
+      // RESET FORM (Create Mode)
+      setName('');
+      // Keep previous residence/status as user convenience? Or reset? Let's reset for clarity.
+      // setResidenceId(ResidenceID.NORTH); 
+      setSelectedOrigin('');
+      setCustomOrigin('');
+      setSelectedCursus('');
+      setCustomCursus('');
+      setStudyYear('');
+      setDuration('');
+    }
+  }, [editingTenant, originOptions]); // Re-run when editingTenant changes
+
+  // Reset selected origin when switching type (only if not editing, or if user manually switches)
+  useEffect(() => {
+    // If we are editing, we don't want to clear this when the component mounts/updates unless user interacts
+    // Simple logic: If current selected doesn't match type, clear it.
+    // However, to keep it simple and avoid bugs during edit population, we'll skip this effect for now or handle it carefully.
+    // Let's rely on manual user change for now.
   }, [originType]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -32,40 +107,61 @@ const TenantForm: React.FC<TenantFormProps> = ({ onAddTenant, residenceConfig, o
     
     // Determine final origin name
     const finalOriginName = selectedOrigin === 'OTHER' ? customOrigin : selectedOrigin;
+    const finalCursus = selectedCursus === 'OTHER' ? customCursus : selectedCursus;
     
-    if (!name || !finalOriginName) return;
+    if (!name || !finalOriginName || !finalCursus) return;
 
-    const newTenant: Tenant = {
-      id: Date.now().toString(),
+    const tenantData: Tenant = {
+      id: editingTenant ? editingTenant.id : Date.now().toString(), // Keep ID if editing
       name,
       residenceId,
       originName: finalOriginName,
       originType,
+      cursus: finalCursus,
       studyYear,
-      // Use the string value directly (even if empty) to satisfy Firebase
       duration: duration, 
       status: status
     };
 
-    onAddTenant(newTenant);
+    if (editingTenant && onUpdateTenant) {
+      onUpdateTenant(tenantData);
+    } else {
+      onAddTenant(tenantData);
+    }
     
-    // Reset basic fields
-    setName('');
-    setSelectedOrigin('');
-    setCustomOrigin('');
-    setStudyYear('');
-    setDuration('');
+    if (!editingTenant) {
+        // Only clear if adding. If updating, usually the parent component will clear editingTenant which triggers the useEffect reset.
+        setName('');
+        setSelectedOrigin('');
+        setCustomOrigin('');
+        setSelectedCursus('');
+        setCustomCursus('');
+        setStudyYear('');
+        setDuration('');
+    }
   };
 
-  // Safe fallback to [] if lists are undefined
-  const currentOptions = (originType === EntityType.SCHOOL ? originOptions.schools : originOptions.internships) || [];
+  const isEditing = !!editingTenant;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sticky top-6">
-      <h3 className="font-bold text-lg text-slate-800 mb-6 flex items-center gap-2">
-        <PlusCircle className="w-5 h-5 text-indigo-600" />
-        Ajouter une personne
-      </h3>
+    <div className={`rounded-xl shadow-sm border p-6 sticky top-6 transition-colors ${isEditing ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200'}`}>
+      
+      <div className="flex justify-between items-start mb-6">
+        <h3 className={`font-bold text-lg flex items-center gap-2 ${isEditing ? 'text-indigo-800' : 'text-slate-800'}`}>
+          {isEditing ? <Pencil className="w-5 h-5" /> : <PlusCircle className="w-5 h-5 text-indigo-600" />}
+          {isEditing ? 'Modifier la fiche' : 'Ajouter une personne'}
+        </h3>
+        
+        {isEditing && onCancelEdit && (
+          <button 
+            onClick={onCancelEdit}
+            className="text-slate-400 hover:text-slate-600 p-1"
+            title="Annuler modification"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
 
       {/* Status Switcher */}
       <div className="flex bg-slate-100 p-1 rounded-lg mb-6">
@@ -125,24 +221,31 @@ const TenantForm: React.FC<TenantFormProps> = ({ onAddTenant, residenceConfig, o
         <div className="space-y-1">
           <label className="text-sm font-medium text-slate-700">Type de Provenance</label>
           <div className="flex gap-4 mt-1 mb-2">
-            <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-2 rounded-lg border border-slate-200 flex-1 justify-center hover:bg-slate-100 transition-colors">
+            <label className={`flex items-center gap-2 cursor-pointer p-2 rounded-lg border flex-1 justify-center transition-colors ${originType === EntityType.SCHOOL ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
               <input 
                 type="radio" 
                 name="originType" 
                 checked={originType === EntityType.SCHOOL} 
-                onChange={() => setOriginType(EntityType.SCHOOL)}
+                onChange={() => {
+                  setOriginType(EntityType.SCHOOL);
+                  // Clear selection if switching types manually
+                  if (!isEditing) setSelectedOrigin('');
+                }}
                 className="text-indigo-600 focus:ring-indigo-500"
               />
               <span className="text-slate-700 text-sm font-medium flex items-center gap-1">
                 <School className="w-4 h-4" /> École
               </span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-2 rounded-lg border border-slate-200 flex-1 justify-center hover:bg-slate-100 transition-colors">
+            <label className={`flex items-center gap-2 cursor-pointer p-2 rounded-lg border flex-1 justify-center transition-colors ${originType === EntityType.INTERNSHIP ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
               <input 
                 type="radio" 
                 name="originType" 
                 checked={originType === EntityType.INTERNSHIP} 
-                onChange={() => setOriginType(EntityType.INTERNSHIP)}
+                onChange={() => {
+                  setOriginType(EntityType.INTERNSHIP);
+                  if (!isEditing) setSelectedOrigin('');
+                }}
                 className="text-indigo-600 focus:ring-indigo-500"
               />
               <span className="text-slate-700 text-sm font-medium flex items-center gap-1">
@@ -152,6 +255,7 @@ const TenantForm: React.FC<TenantFormProps> = ({ onAddTenant, residenceConfig, o
           </div>
         </div>
 
+        {/* 1. SCHOOL / COMPANY SELECTION */}
         <div className="space-y-1">
           <label className="text-sm font-medium text-slate-700">
             {originType === EntityType.SCHOOL ? "Établissement" : "Lieu de stage / Entreprise"}
@@ -169,17 +273,48 @@ const TenantForm: React.FC<TenantFormProps> = ({ onAddTenant, residenceConfig, o
             <option value="OTHER" className="font-semibold text-indigo-600">+ Autre (Saisir manuellement)</option>
           </select>
 
-          {/* Conditional Input for "Other" */}
           {selectedOrigin === 'OTHER' && (
             <div className="animate-in fade-in slide-in-from-top-2 duration-200 mt-2">
               <input
                 type="text"
                 required
-                autoFocus
                 className="w-full px-3 py-2 border border-indigo-300 bg-indigo-50 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                 placeholder={originType === EntityType.SCHOOL ? "Nom de l'école..." : "Nom de l'entreprise..."}
                 value={customOrigin}
                 onChange={(e) => setCustomOrigin(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* 2. CURSUS SELECTION (NEW) */}
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+             <GraduationCap className="w-4 h-4 text-slate-500" />
+             Cursus / Filière
+          </label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+            value={selectedCursus}
+            onChange={(e) => setSelectedCursus(e.target.value)}
+            required
+          >
+            <option value="" disabled>-- Sélectionner --</option>
+            {cursusOptions.map((opt, idx) => (
+              <option key={idx} value={opt}>{opt}</option>
+            ))}
+            <option value="OTHER" className="font-semibold text-indigo-600">+ Autre (Saisir manuellement)</option>
+          </select>
+
+          {selectedCursus === 'OTHER' && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-200 mt-2">
+              <input
+                type="text"
+                required
+                className="w-full px-3 py-2 border border-indigo-300 bg-indigo-50 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                placeholder="Ex: Architecture, Marketing Digital..."
+                value={customCursus}
+                onChange={(e) => setCustomCursus(e.target.value)}
               />
             </div>
           )}
@@ -209,17 +344,26 @@ const TenantForm: React.FC<TenantFormProps> = ({ onAddTenant, residenceConfig, o
           </div>
         )}
 
-        <div className="pt-2">
+        <div className="pt-2 flex gap-3">
+          {isEditing && onCancelEdit && (
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="flex-1 bg-white border border-slate-300 text-slate-700 font-medium py-2.5 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              Annuler
+            </button>
+          )}
           <button
             type="submit"
-            className={`w-full text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+            className={`flex-1 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 ${
               status === PersonStatus.TENANT 
               ? 'bg-indigo-600 hover:bg-indigo-700' 
               : 'bg-amber-600 hover:bg-amber-700'
             }`}
           >
             <Save className="w-4 h-4" />
-            {status === PersonStatus.TENANT ? 'Enregistrer Locataire' : 'Enregistrer Contact'}
+            {isEditing ? 'Modifier' : (status === PersonStatus.TENANT ? 'Enregistrer' : 'Ajouter Contact')}
           </button>
         </div>
 

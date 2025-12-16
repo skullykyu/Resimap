@@ -24,6 +24,7 @@ export interface ResidenceConfig {
 export interface OriginOptions {
   schools: string[];
   internships: string[];
+  studyFields: string[]; // Cursus / Filière (Ex: Droit, Marketing, Info...)
 }
 
 export interface Tenant {
@@ -32,6 +33,7 @@ export interface Tenant {
   residenceId: ResidenceID;
   originName: string;
   originType: EntityType;
+  cursus: string; // Nouveau champ Cursus
   studyYear: string;
   duration?: string;
   status: PersonStatus;
