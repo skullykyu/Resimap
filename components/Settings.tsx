@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ResidenceConfig, ResidenceID, OriginOptions, Tenant, FirebaseConfig } from '../types';
-import { Settings as SettingsIcon, Trash2, Plus, School, Building, AlertOctagon, Download, Upload, FileJson, Copy, Check, Info, Cloud, Wifi, WifiOff } from 'lucide-react';
+import { Settings as SettingsIcon, Trash2, Plus, School, Building, AlertOctagon, Download, Upload, FileJson, Copy, Check, Info, Cloud, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 
 interface SettingsProps {
   config: ResidenceConfig[];
@@ -14,6 +14,7 @@ interface SettingsProps {
   // Cloud Props
   onConnectCloud: (config: FirebaseConfig) => void;
   onDisconnectCloud: () => void;
+  onForcePush: () => void;
   isCloudConnected: boolean;
 }
 
@@ -27,6 +28,7 @@ const Settings: React.FC<SettingsProps> = ({
   onImportData,
   onConnectCloud,
   onDisconnectCloud,
+  onForcePush,
   isCloudConnected
 }) => {
   // Config Management
@@ -91,13 +93,10 @@ const Settings: React.FC<SettingsProps> = ({
   const handleConnect = () => {
     try {
       let input = firebaseConfigInput.trim();
-
-      // 1. Nettoyage intelligent : On cherche l'objet { ... } à l'intérieur du texte collé
       const configMatch = input.match(/firebaseConfig\s*=\s*({[\s\S]*?})(?:;|$)/);
       if (configMatch && configMatch[1]) {
         input = configMatch[1];
       } else {
-        // Si on ne trouve pas "const...", on essaie de trouver juste le premier { et le dernier }
         const firstBrace = input.indexOf('{');
         const lastBrace = input.lastIndexOf('}');
         if (firstBrace !== -1 && lastBrace !== -1) {
@@ -105,37 +104,27 @@ const Settings: React.FC<SettingsProps> = ({
         }
       }
 
-      // 2. Parsing souple
       let configObj;
       try {
         configObj = new Function('return ' + input)();
       } catch (e) {
-        throw new Error("Impossible de lire la configuration. Vérifiez que vous avez copié tout le bloc.");
+        throw new Error("Impossible de lire la configuration.");
       }
 
-      // 3. Vérification des champs requis
       if (!configObj.apiKey || !configObj.projectId) {
-         alert("La configuration semble incomplète. Il manque l'apiKey ou le projectId.");
+         alert("La configuration semble incomplète.");
          return;
       }
       
-      // 4. Ajout automatique de databaseURL si manquante (cas fréquent)
       if (!configObj.databaseURL) {
-        // Tentative de deviner l'URL pour l'Europe (West 1 - Belgique) car utilisateur francophone
         const euUrl = `https://${configObj.projectId}-default-rtdb.europe-west1.firebasedatabase.app`;
-        // Fallback pour US (Legacy)
-        const usUrl = `https://${configObj.projectId}.firebaseio.com`;
-
-        // On assigne l'URL Europe par défaut
         configObj.databaseURL = euUrl;
-
-        alert(`Info : Votre code Firebase ne contenait pas l'adresse de la base de données.\n\nJ'ai ajouté automatiquement l'adresse standard pour l'Europe :\n${euUrl}\n\nSi la connexion échoue (message d'erreur rouge), c'est que votre base est peut-être aux USA. Dans ce cas, contactez le support.`);
       }
 
       onConnectCloud(configObj);
     } catch (e) {
       console.error(e);
-      alert("Erreur de lecture du code. Assurez-vous d'avoir copié tout le bloc 'const firebaseConfig = { ... };'");
+      alert("Erreur de lecture du code.");
     }
   };
 
@@ -230,33 +219,34 @@ const Settings: React.FC<SettingsProps> = ({
 
         <div className="p-6">
           {isCloudConnected ? (
-            <div className="flex flex-col gap-4">
-              <div className="bg-white p-4 rounded-lg border border-indigo-100 text-sm text-indigo-800">
-                <p><strong>Félicitations !</strong> Votre application est connectée au cloud.</p>
-                <p className="mt-2">Pour que vos collègues accèdent aux mêmes données :</p>
-                <ol className="list-decimal ml-5 mt-1 space-y-1">
-                  <li>Envoyez-leur le lien de cette application (Netlify).</li>
-                  <li>Donnez-leur la configuration ci-dessous.</li>
-                </ol>
-              </div>
+            <div className="flex flex-col gap-6">
               
-              <div className="relative">
-                <textarea
-                    readOnly
-                    value={firebaseConfigInput}
-                    className="w-full h-24 p-3 font-mono text-xs border border-indigo-200 bg-indigo-50/50 rounded-lg text-indigo-800 focus:outline-none"
-                  />
-                  <div className="absolute top-2 right-2">
-                     <button onClick={() => {navigator.clipboard.writeText(firebaseConfigInput); alert('Copié !')}} className="p-1 bg-white rounded shadow text-xs">Copier</button>
-                  </div>
+              <div className="bg-white p-4 rounded-lg border border-indigo-100 text-sm text-indigo-800">
+                <p><strong>Tout est opérationnel !</strong></p>
+                <p className="mt-2">Si votre collègue ne voit pas vos données, c'est probablement car la base de données était vide au moment de la connexion. Cliquez sur le bouton ci-dessous pour envoyer vos données actuelles.</p>
               </div>
 
-              <button 
-                onClick={onDisconnectCloud}
-                className="self-start px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
-              >
-                Déconnecter / Changer de base de données
-              </button>
+              <div className="flex gap-4 items-center flex-wrap">
+                 <button 
+                  onClick={onForcePush}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-lg font-bold transition-all shadow-sm flex items-center gap-2"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                  Forcer l'envoi de MES données vers le Cloud
+                </button>
+                <p className="text-xs text-slate-500 italic max-w-sm">
+                  À utiliser uniquement si les autres utilisateurs ne voient pas vos modifications.
+                </p>
+              </div>
+
+              <div className="border-t border-indigo-100 pt-4 mt-2">
+                <button 
+                  onClick={onDisconnectCloud}
+                  className="text-red-500 hover:text-red-700 text-sm font-medium underline"
+                >
+                  Déconnecter / Changer de configuration
+                </button>
+              </div>
             </div>
           ) : (
             <div>
@@ -272,22 +262,19 @@ const Settings: React.FC<SettingsProps> = ({
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
                   <div className="text-sm text-slate-600 bg-blue-50 p-4 rounded-lg border border-blue-100">
                     <p className="font-semibold text-blue-800 mb-1">Collez votre code Firebase ici :</p>
-                    <p className="text-blue-800/80 mb-2">
-                      Copiez tout le contenu que vous avez vu (les lignes <code>import</code>, <code>const firebaseConfig</code>, etc.). Je ferai le tri automatiquement.
-                    </p>
                   </div>
                   <textarea
                     value={firebaseConfigInput}
                     onChange={(e) => setFirebaseConfigInput(e.target.value)}
-                    placeholder={'// Import the functions...\nconst firebaseConfig = {\n  apiKey: "AIza...",\n  ...\n};'}
-                    className="w-full h-48 p-3 font-mono text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder={'const firebaseConfig = { ... };'}
+                    className="w-full h-40 p-3 font-mono text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                   <div className="flex gap-3">
                     <button 
                       onClick={handleConnect}
                       className="bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium transition-colors"
                     >
-                      Connecter au Cloud
+                      Connecter
                     </button>
                     <button 
                       onClick={() => setShowCloudForm(false)}

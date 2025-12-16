@@ -110,7 +110,7 @@ const App: React.FC = () => {
       localStorage.setItem('resimap_firebase_config', JSON.stringify(config));
       alert("Connexion au Cloud réussie ! Les données vont se synchroniser.");
       
-      // Initial Push (optional, be careful not to overwrite if fetching first)
+      // Initial Push
       saveToFirebase('tenants', tenants);
       saveToFirebase('config', residenceConfig);
       saveToFirebase('origins', originOptions);
@@ -119,10 +119,20 @@ const App: React.FC = () => {
     }
   };
 
+  const handleForcePushToCloud = () => {
+    if (!cloudConnected) {
+      alert("Vous n'êtes pas connecté au Cloud.");
+      return;
+    }
+    if (window.confirm("Cela va écraser les données du Cloud (Firebase) avec les données que VOUS voyez actuellement sur cet écran. Votre collègue verra ensuite ces données. Continuer ?")) {
+      saveToFirebase('tenants', tenants);
+      saveToFirebase('config', residenceConfig);
+      saveToFirebase('origins', originOptions);
+      alert("Données envoyées avec succès vers le serveur ! Votre collègue devrait voir la mise à jour d'ici quelques secondes.");
+    }
+  };
+
   const handleCloudDisconnect = () => {
-    // If we disconnect, we remove the LOCAL override. 
-    // But since we have embedded config, it might reconnect automatically on refresh unless we add logic to prevent it.
-    // For now, simple behavior: clear local storage override.
     localStorage.removeItem('resimap_firebase_config');
     setCloudConnected(false);
     window.location.reload(); 
@@ -341,6 +351,7 @@ const App: React.FC = () => {
                  onImportData={handleImportData}
                  onConnectCloud={handleCloudConnect}
                  onDisconnectCloud={handleCloudDisconnect}
+                 onForcePush={handleForcePushToCloud}
                  isCloudConnected={cloudConnected}
                />
             </div>
