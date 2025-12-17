@@ -36,12 +36,50 @@ const Dashboard: React.FC<DashboardProps> = ({ tenants, residenceConfig }) => {
   const topSchoolsData = Object.entries(originCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([name, count]) => ({ name, value: count }));
+    .map(([name, count]) => ({ 
+      name, 
+      value: count,
+      // Calcul du pourcentage par rapport au total affiché
+      percentage: totalTenants > 0 ? ((count / totalTenants) * 100).toFixed(1) : '0'
+    }));
 
-  // Calculate estimated capacity percentage (simple logic based on mocked capacity of 20 per res)
-  // If ALL: 80 total capacity. If Single: 20 capacity.
-  const capacityBase = filterId === 'ALL' ? 80 : 20;
+  // Calculate actual capacity based on configuration
+  let capacityBase = 0;
+  
+  if (filterId === 'ALL') {
+    // Sum capacity of all residences
+    capacityBase = residenceConfig.reduce((acc, curr) => acc + (curr.capacity || 0), 0);
+  } else {
+    // Get capacity of selected residence
+    const selectedRes = residenceConfig.find(r => r.id === filterId);
+    capacityBase = selectedRes?.capacity || 0;
+  }
+  
+  // Prevent division by zero
+  if (capacityBase === 0) capacityBase = 1;
+
   const fillRate = (totalTenants / capacityBase * 100).toFixed(0);
+
+  // Custom Tooltip for the Bar Chart to show percentage
+  const CustomBarTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-3 border border-slate-200 shadow-lg rounded-lg text-sm">
+          <p className="font-bold text-slate-800 mb-1">{label}</p>
+          <div className="flex flex-col gap-1">
+            <span className="text-indigo-600 font-semibold">
+              {data.value} étudiant{data.value > 1 ? 's' : ''}
+            </span>
+            <span className="text-slate-500 text-xs">
+              Représente {data.percentage}% des locataires
+            </span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -71,16 +109,29 @@ const Dashboard: React.FC<DashboardProps> = ({ tenants, residenceConfig }) => {
           </p>
           <h3 className="text-3xl font-bold text-slate-800 mt-1">{totalTenants}</h3>
         </div>
+        
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-          <p className="text-sm font-medium text-slate-500">Taux Remplissage Est.</p>
-          <h3 className="text-3xl font-bold text-slate-800 mt-1">{fillRate}%</h3>
-          <p className="text-xs text-slate-400 mt-1">Basé sur cap. est. de {capacityBase}</p>
+          <p className="text-sm font-medium text-slate-500">Taux Remplissage Réel</p>
+          <div className="flex items-baseline gap-2 mt-1">
+            <h3 className="text-3xl font-bold text-slate-800">{fillRate}%</h3>
+            <span className="text-sm text-slate-400 font-medium">/ 100%</span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">Sur {capacityBase} logements disponibles</p>
         </div>
+        
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <p className="text-sm font-medium text-slate-500">Top Provenance</p>
           <h3 className="text-xl font-bold text-slate-800 mt-2 truncate">
             {topSchoolsData[0]?.name || 'N/A'}
           </h3>
+          {topSchoolsData[0] && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                {topSchoolsData[0].percentage}%
+              </span>
+              <span className="text-xs text-slate-400">des effectifs</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -121,15 +172,15 @@ const Dashboard: React.FC<DashboardProps> = ({ tenants, residenceConfig }) => {
 
         {/* Top Schools */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col h-[350px]">
-          <h3 className="font-semibold text-slate-800 mb-4">Top 5 Écoles & Entreprises</h3>
+          <h3 className="font-semibold text-slate-800 mb-4">Top 5 Écoles & Entreprises (%)</h3>
           <div className="flex-grow w-full min-h-0">
             {topSchoolsData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topSchoolsData} layout="vertical" margin={{ left: 40 }}>
+                <BarChart data={topSchoolsData} layout="vertical" margin={{ left: 40, right: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                   <XAxis type="number" hide />
                   <YAxis dataKey="name" type="category" width={120} tick={{fontSize: 12}} />
-                  <Tooltip cursor={{fill: 'transparent'}} />
+                  <Tooltip content={<CustomBarTooltip />} cursor={{fill: 'transparent'}} />
                   <Bar dataKey="value" fill="#4f46e5" radius={[0, 4, 4, 0]} barSize={20} />
                 </BarChart>
               </ResponsiveContainer>

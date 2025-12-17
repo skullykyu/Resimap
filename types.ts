@@ -19,6 +19,7 @@ export interface ResidenceConfig {
   id: ResidenceID;
   name: string;
   color: string;
+  capacity: number; // Nouveau champ : Nombre de logements
 }
 
 export interface OriginOptions {

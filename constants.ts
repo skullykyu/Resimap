@@ -1,10 +1,10 @@
 import { Tenant, ResidenceID, EntityType, ResidenceConfig, PersonStatus, OriginOptions } from './types';
 
 export const DEFAULT_RESIDENCE_CONFIG: ResidenceConfig[] = [
-  { id: ResidenceID.NORTH, name: "Résidence du Parc (Nord)", color: '#3b82f6' },
-  { id: ResidenceID.SOUTH, name: "Campus Sud (Sud)", color: '#ef4444' },
-  { id: ResidenceID.CENTER, name: "Le Loft (Centre)", color: '#10b981' },
-  { id: ResidenceID.EAST, name: "Rive Droite (Est)", color: '#f59e0b' },
+  { id: ResidenceID.NORTH, name: "Résidence du Parc (Nord)", color: '#3b82f6', capacity: 50 },
+  { id: ResidenceID.SOUTH, name: "Campus Sud (Sud)", color: '#ef4444', capacity: 50 },
+  { id: ResidenceID.CENTER, name: "Le Loft (Centre)", color: '#10b981', capacity: 40 },
+  { id: ResidenceID.EAST, name: "Rive Droite (Est)", color: '#f59e0b', capacity: 60 },
 ];
 
 export const DEFAULT_ORIGIN_OPTIONS: OriginOptions = {

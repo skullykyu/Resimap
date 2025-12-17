@@ -30,7 +30,7 @@ const Settings: React.FC<SettingsProps> = ({
   isCloudConnected
 }) => {
   // Config Management
-  const handleChangeConfig = (id: ResidenceID, field: keyof ResidenceConfig, value: string) => {
+  const handleChangeConfig = (id: ResidenceID, field: keyof ResidenceConfig, value: string | number) => {
     const newConfig = config.map(c => 
       c.id === id ? { ...c, [field]: value } : c
     );
@@ -249,15 +249,17 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
           <div>
             <h2 className="text-xl font-bold text-slate-800">Configuration des Résidences</h2>
-            <p className="text-slate-500 text-sm">Personnalisez les noms et couleurs de vos 4 résidences.</p>
+            <p className="text-slate-500 text-sm">Personnalisez les noms, capacités et couleurs de vos 4 résidences.</p>
           </div>
         </div>
 
         <div className="p-6">
           <div className="grid grid-cols-1 gap-6">
             {config.map((res) => (
-              <div key={res.id} className="flex flex-col md:flex-row gap-4 items-start md:items-end p-4 border border-slate-100 rounded-lg hover:bg-slate-50 transition-colors">
-                <div className="flex-grow space-y-1 w-full">
+              <div key={res.id} className="flex flex-col lg:flex-row gap-4 items-start lg:items-end p-4 border border-slate-100 rounded-lg hover:bg-slate-50 transition-colors">
+                
+                {/* Name Input */}
+                <div className="flex-grow space-y-1 w-full lg:w-auto">
                   <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Nom de la résidence ({res.id.replace('RES_', '')})
                   </label>
@@ -268,7 +270,20 @@ const Settings: React.FC<SettingsProps> = ({
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-medium text-slate-800"
                   />
                 </div>
+
+                {/* Capacity Input (NEW) */}
+                <div className="space-y-1 w-full lg:w-32">
+                   <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Capacité (Logts)</label>
+                   <input
+                    type="number"
+                    min="1"
+                    value={res.capacity || 0}
+                    onChange={(e) => handleChangeConfig(res.id, 'capacity', parseInt(e.target.value) || 0)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-medium text-slate-800 text-right"
+                  />
+                </div>
                 
+                {/* Color Input */}
                 <div className="space-y-1">
                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Couleur</label>
                    <div className="flex items-center gap-2">
