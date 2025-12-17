@@ -245,104 +245,6 @@ const Settings: React.FC<SettingsProps> = ({
         </div>
       )}
 
-
-      {/* CLOUD SYNC SECTION */}
-      <div className={`rounded-xl shadow-sm border overflow-hidden ${isCloudConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
-        <div className={`p-6 border-b flex items-center gap-3 ${isCloudConnected ? 'border-emerald-100 bg-emerald-100/50' : 'border-slate-100 bg-slate-100'}`}>
-          <div className={`p-2 rounded-lg ${isCloudConnected ? 'bg-emerald-200 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
-            <Cloud className="w-6 h-6" />
-          </div>
-          <div className="flex-grow">
-            <h2 className={`text-xl font-bold ${isCloudConnected ? 'text-emerald-900' : 'text-slate-800'}`}>
-              Site Partagé (Synchronisation Automatique)
-            </h2>
-            <p className={`${isCloudConnected ? 'text-emerald-700' : 'text-slate-500'} text-sm`}>
-               Toutes les modifications sont enregistrées sur le projet <strong>resimap63000</strong> et visibles par tous.
-            </p>
-          </div>
-          <div>
-            {isCloudConnected ? (
-              <span className="flex items-center gap-2 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold uppercase tracking-wide border border-emerald-200">
-                <Wifi className="w-4 h-4" /> En Ligne
-              </span>
-            ) : (
-               <span className="flex items-center gap-2 px-3 py-1 bg-slate-200 text-slate-600 rounded-full text-xs font-bold uppercase tracking-wide border border-slate-300">
-                <WifiOff className="w-4 h-4" /> Hors Ligne
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="p-6">
-            {isCloudConnected && (
-              <div className="flex gap-4 items-center flex-wrap">
-                 <button 
-                  onClick={onForcePush}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-lg font-bold transition-all shadow-sm flex items-center gap-2"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                  Forcer la sauvegarde (Manuel)
-                </button>
-                <p className="text-xs text-slate-500 italic max-w-sm">
-                  Normalement inutile, la sauvegarde est automatique à chaque modification.
-                </p>
-              </div>
-            )}
-        </div>
-      </div>
-
-      {/* 0. Data Sharing / Backup (Local) */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
-          <div className="p-2 bg-slate-200 rounded-lg">
-            <FileJson className="w-6 h-6 text-slate-700" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-800">Export / Import (Fichiers)</h2>
-            <p className="text-slate-500 text-sm">Utile pour faire des copies de sécurité sur votre ordinateur.</p>
-          </div>
-        </div>
-        
-        <div className="p-6">
-          <div className="flex flex-col sm:flex-row gap-4 mb-4">
-            <button 
-              onClick={handleCopyToClipboard}
-              className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-sm border ${
-                copied 
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
-              }`}
-            >
-              {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-              {copied ? 'Copié !' : 'Copier les données'}
-            </button>
-            
-            <button 
-              onClick={handleExport}
-              className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              <Download className="w-5 h-5" />
-              Télécharger (.json)
-            </button>
-            
-            <button 
-              onClick={handleImportClick}
-              className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              <Upload className="w-5 h-5" />
-              Importer
-            </button>
-            <input 
-              type="file" 
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".json"
-              className="hidden" 
-            />
-          </div>
-        </div>
-      </div>
-
       {/* 1. Residence Configuration */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
@@ -554,6 +456,103 @@ const Settings: React.FC<SettingsProps> = ({
             </ul>
           </div>
 
+        </div>
+      </div>
+
+      {/* CLOUD SYNC SECTION */}
+      <div className={`rounded-xl shadow-sm border overflow-hidden ${isCloudConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+        <div className={`p-6 border-b flex items-center gap-3 ${isCloudConnected ? 'border-emerald-100 bg-emerald-100/50' : 'border-slate-100 bg-slate-100'}`}>
+          <div className={`p-2 rounded-lg ${isCloudConnected ? 'bg-emerald-200 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
+            <Cloud className="w-6 h-6" />
+          </div>
+          <div className="flex-grow">
+            <h2 className={`text-xl font-bold ${isCloudConnected ? 'text-emerald-900' : 'text-slate-800'}`}>
+              Site Partagé (Synchronisation Automatique)
+            </h2>
+            <p className={`${isCloudConnected ? 'text-emerald-700' : 'text-slate-500'} text-sm`}>
+               Toutes les modifications sont enregistrées sur le projet <strong>resimap63000</strong> et visibles par tous.
+            </p>
+          </div>
+          <div>
+            {isCloudConnected ? (
+              <span className="flex items-center gap-2 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold uppercase tracking-wide border border-emerald-200">
+                <Wifi className="w-4 h-4" /> En Ligne
+              </span>
+            ) : (
+               <span className="flex items-center gap-2 px-3 py-1 bg-slate-200 text-slate-600 rounded-full text-xs font-bold uppercase tracking-wide border border-slate-300">
+                <WifiOff className="w-4 h-4" /> Hors Ligne
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6">
+            {isCloudConnected && (
+              <div className="flex gap-4 items-center flex-wrap">
+                 <button 
+                  onClick={onForcePush}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-lg font-bold transition-all shadow-sm flex items-center gap-2"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                  Forcer la sauvegarde (Manuel)
+                </button>
+                <p className="text-xs text-slate-500 italic max-w-sm">
+                  Normalement inutile, la sauvegarde est automatique à chaque modification.
+                </p>
+              </div>
+            )}
+        </div>
+      </div>
+
+      {/* 0. Data Sharing / Backup (Local) */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
+          <div className="p-2 bg-slate-200 rounded-lg">
+            <FileJson className="w-6 h-6 text-slate-700" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">Export / Import (Fichiers)</h2>
+            <p className="text-slate-500 text-sm">Utile pour faire des copies de sécurité sur votre ordinateur.</p>
+          </div>
+        </div>
+        
+        <div className="p-6">
+          <div className="flex flex-col sm:flex-row gap-4 mb-4">
+            <button 
+              onClick={handleCopyToClipboard}
+              className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-sm border ${
+                copied 
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+              }`}
+            >
+              {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+              {copied ? 'Copié !' : 'Copier les données'}
+            </button>
+            
+            <button 
+              onClick={handleExport}
+              className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
+            >
+              <Download className="w-5 h-5" />
+              Télécharger (.json)
+            </button>
+            
+            <button 
+              onClick={handleImportClick}
+              className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
+            >
+              <Upload className="w-5 h-5" />
+              Importer
+            </button>
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".json"
+              className="hidden" 
+            />
+          </div>
         </div>
       </div>
 
