@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ResidenceConfig, ResidenceID, OriginOptions, Tenant, FirebaseConfig } from '../types';
-import { Settings as SettingsIcon, Trash2, Plus, School, Building, Download, Upload, FileJson, Copy, Check, Cloud, Wifi, WifiOff, RefreshCw, GraduationCap } from 'lucide-react';
+import { ResidenceConfig, ResidenceID, OriginOptions, Tenant, FirebaseConfig, OriginMetadata } from '../types';
+import { Settings as SettingsIcon, Trash2, Plus, School, Building, Download, Upload, FileJson, Copy, Check, Cloud, Wifi, WifiOff, RefreshCw, GraduationCap, Pencil, X, MapPin } from 'lucide-react';
 
 interface SettingsProps {
   config: ResidenceConfig[];
@@ -16,6 +16,10 @@ interface SettingsProps {
   onDisconnectCloud: () => void;
   onForcePush: () => void;
   isCloudConnected: boolean;
+
+  // Metadata Props
+  originMetadata?: OriginMetadata;
+  onUpdateMetadata?: (metadata: OriginMetadata) => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
@@ -27,7 +31,9 @@ const Settings: React.FC<SettingsProps> = ({
   tenants,
   onImportData,
   onForcePush,
-  isCloudConnected
+  isCloudConnected,
+  originMetadata = {},
+  onUpdateMetadata
 }) => {
   // Config Management
   const handleChangeConfig = (id: ResidenceID, field: keyof ResidenceConfig, value: string | number) => {
@@ -43,6 +49,10 @@ const Settings: React.FC<SettingsProps> = ({
   const [newCursus, setNewCursus] = useState(''); // New State
   const [copied, setCopied] = useState(false);
   
+  // --- METADATA MODAL STATE ---
+  const [editingOrigin, setEditingOrigin] = useState<string | null>(null);
+  const [tempDistances, setTempDistances] = useState<Record<string, string>>({});
+
   // File Import Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -91,6 +101,7 @@ const Settings: React.FC<SettingsProps> = ({
       tenants,
       config,
       origins: originOptions,
+      metadata: originMetadata,
       exportDate: new Date().toISOString()
     };
   };
@@ -141,9 +152,100 @@ const Settings: React.FC<SettingsProps> = ({
     e.target.value = '';
   };
 
+  // --- Modal Logic ---
+  
+  const openEditModal = (originName: string) => {
+    const existing = originMetadata[originName]?.distances || {};
+    setTempDistances({ ...existing }); // Clone existing data or empty
+    setEditingOrigin(originName);
+  };
+
+  const closeEditModal = () => {
+    setEditingOrigin(null);
+    setTempDistances({});
+  };
+
+  const saveMetadata = () => {
+    if (editingOrigin && onUpdateMetadata) {
+      onUpdateMetadata({
+        ...originMetadata,
+        [editingOrigin]: {
+          distances: tempDistances,
+          notes: originMetadata[editingOrigin]?.notes || ''
+        }
+      });
+    }
+    closeEditModal();
+  };
+
+  const handleDistanceChange = (resId: string, value: string) => {
+    setTempDistances(prev => ({
+      ...prev,
+      [resId]: value
+    }));
+  };
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 mb-8">
+    <div className="space-y-8 animate-in fade-in duration-500 mb-8 relative">
       
+      {/* EDIT MODAL OVERLAY */}
+      {editingOrigin && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+             <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                   <MapPin className="w-5 h-5 text-indigo-600" />
+                   Détails : {editingOrigin}
+                </h3>
+                <button onClick={closeEditModal} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+             </div>
+             
+             <div className="p-6 max-h-[60vh] overflow-y-auto">
+                <p className="text-sm text-slate-500 mb-4">
+                  Renseignez les distances ou temps de trajet vers vos différentes résidences. (Ex: "10 min à pied", "5 km", etc.)
+                </p>
+                <div className="space-y-4">
+                  {config.map(res => (
+                    <div key={res.id} className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: res.color }}>
+                         {res.name.substring(0, 1)}
+                      </div>
+                      <div className="flex-grow">
+                         <label className="text-xs font-semibold text-slate-500 uppercase">{res.name}</label>
+                         <input 
+                            type="text"
+                            placeholder="Ex: 15 min (Tram)"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none mt-1"
+                            value={tempDistances[res.id] || ''}
+                            onChange={(e) => handleDistanceChange(res.id, e.target.value)}
+                         />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+             </div>
+
+             <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+                <button 
+                  onClick={closeEditModal}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  Annuler
+                </button>
+                <button 
+                  onClick={saveMetadata}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm"
+                >
+                  Enregistrer
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
+
+
       {/* CLOUD SYNC SECTION */}
       <div className={`rounded-xl shadow-sm border overflow-hidden ${isCloudConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
         <div className={`p-6 border-b flex items-center gap-3 ${isCloudConnected ? 'border-emerald-100 bg-emerald-100/50' : 'border-slate-100 bg-slate-100'}`}>
@@ -343,12 +445,22 @@ const Settings: React.FC<SettingsProps> = ({
               {(originOptions.schools || []).map((school, idx) => (
                 <li key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-md group hover:bg-slate-100 transition-colors">
                   <span className="text-slate-700">{school}</span>
-                  <button 
-                    onClick={() => removeOption('schools', school)}
-                    className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => openEditModal(school)}
+                      className="text-slate-400 hover:text-indigo-600 p-1"
+                      title="Modifier les détails (distances)"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => removeOption('schools', school)}
+                      className="text-slate-400 hover:text-red-500 p-1"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -421,12 +533,22 @@ const Settings: React.FC<SettingsProps> = ({
               {(originOptions.internships || []).map((company, idx) => (
                 <li key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-md group hover:bg-slate-100 transition-colors">
                   <span className="text-slate-700">{company}</span>
-                  <button 
-                    onClick={() => removeOption('internships', company)}
-                    className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => openEditModal(company)}
+                      className="text-slate-400 hover:text-indigo-600 p-1"
+                      title="Modifier les détails (distances)"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => removeOption('internships', company)}
+                      className="text-slate-400 hover:text-red-500 p-1"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

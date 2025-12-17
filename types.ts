@@ -34,6 +34,14 @@ export interface OriginOptions {
   studyFields: string[]; // Cursus / Filière (Ex: Droit, Marketing, Info...)
 }
 
+// Nouvelle interface pour stocker les détails supplémentaires (distances)
+export interface OriginMetadata {
+  [originName: string]: {
+    distances: Record<string, string>; // Key: ResidenceID, Value: "10 min", "2km"...
+    notes?: string;
+  };
+}
+
 export interface Tenant {
   id: string;
   name: string;

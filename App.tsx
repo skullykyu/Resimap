@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MOCK_TENANTS, DEFAULT_RESIDENCE_CONFIG, DEFAULT_ORIGIN_OPTIONS, EMBEDDED_FIREBASE_CONFIG } from './constants';
-import { Tenant, ResidenceConfig, PersonStatus, OriginOptions, FirebaseConfig, EntityType } from './types';
+import { Tenant, ResidenceConfig, PersonStatus, OriginOptions, FirebaseConfig, EntityType, OriginMetadata } from './types';
 import Dashboard from './components/Dashboard';
 import TenantForm from './components/TenantForm';
 import RelationshipMap from './components/RelationshipMap';
@@ -43,6 +43,12 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('resimap_origins');
     return saved ? JSON.parse(saved) : DEFAULT_ORIGIN_OPTIONS;
   });
+
+  // New State for Metadata (Distances)
+  const [originMetadata, setOriginMetadata] = useState<OriginMetadata>(() => {
+    const saved = localStorage.getItem('resimap_metadata');
+    return saved ? JSON.parse(saved) : {};
+  });
   
   // State for Data View sub-tab
   const [dataViewMode, setDataViewMode] = useState<PersonStatus>(PersonStatus.TENANT);
@@ -68,22 +74,23 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!cloudConnected) return;
 
-    const handleDataUpdate = (data: any, type: 'tenants' | 'config' | 'origins') => {
+    const handleDataUpdate = (data: any, type: 'tenants' | 'config' | 'origins' | 'metadata') => {
       setLastSyncTime(new Date());
       setSyncError(null); // Clear error if we successfully receive data
       
-      if (!data && type !== 'origins') return; // Ignore null data for main lists unless explicitly handled
+      if (!data && type !== 'origins' && type !== 'metadata') return; 
       
       if (type === 'tenants') setTenants(data || []);
       if (type === 'config') setResidenceConfig(data);
       if (type === 'origins') {
-        // PROTECTION CRITIQUE : Si 'schools' ou 'internships' est vide en base, Firebase ne renvoie rien.
-        // On force des tableaux vides [] pour éviter les crashs "map of undefined".
         setOriginOptions({
           schools: data?.schools || [],
           internships: data?.internships || [],
-          studyFields: data?.studyFields || DEFAULT_ORIGIN_OPTIONS.studyFields // Init Cursus too
+          studyFields: data?.studyFields || DEFAULT_ORIGIN_OPTIONS.studyFields
         });
+      }
+      if (type === 'metadata') {
+        setOriginMetadata(data || {});
       }
     };
 
@@ -101,11 +108,13 @@ const App: React.FC = () => {
     const unsubTenants = subscribeToData('tenants', (data) => handleDataUpdate(data, 'tenants'), handleError);
     const unsubConfig = subscribeToData('config', (data) => handleDataUpdate(data, 'config'), handleError);
     const unsubOrigins = subscribeToData('origins', (data) => handleDataUpdate(data, 'origins'), handleError);
+    const unsubMetadata = subscribeToData('metadata', (data) => handleDataUpdate(data, 'metadata'), handleError);
 
     return () => {
       unsubTenants();
       unsubConfig();
       unsubOrigins();
+      unsubMetadata();
     };
   }, [cloudConnected]);
 
@@ -122,6 +131,10 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('resimap_origins', JSON.stringify(originOptions));
   }, [originOptions]);
+
+  useEffect(() => {
+    localStorage.setItem('resimap_metadata', JSON.stringify(originMetadata));
+  }, [originMetadata]);
 
   // --- Handlers (With Cloud Sync) ---
 
@@ -156,7 +169,8 @@ const App: React.FC = () => {
         await Promise.all([
           saveToFirebase('tenants', tenants),
           saveToFirebase('config', residenceConfig),
-          saveToFirebase('origins', originOptions)
+          saveToFirebase('origins', originOptions),
+          saveToFirebase('metadata', originMetadata)
         ]);
         alert("✅ Succès ! Données mises à jour pour tout le monde.");
         setLastSyncTime(new Date());
@@ -171,8 +185,6 @@ const App: React.FC = () => {
   };
 
   const handleCloudDisconnect = () => {
-    // In shared mode, "disconnect" just reloads, but since it's hardcoded it will reconnect.
-    // We could implement a "Go Offline" mode if needed, but for now simple reload.
     window.location.reload(); 
   };
 
@@ -181,14 +193,14 @@ const App: React.FC = () => {
     let updatedOptions = { ...originOptions };
     let hasChanges = false;
     
-    // 1. Cursus / Formation (Nettoyage et ajout si inexistant)
+    // 1. Cursus
     const cleanCursus = tenant.cursus ? tenant.cursus.trim() : '';
     if (cleanCursus && !updatedOptions.studyFields.includes(cleanCursus)) {
       updatedOptions.studyFields = [...updatedOptions.studyFields, cleanCursus].sort();
       hasChanges = true;
     }
 
-    // 2. Écoles / Entreprises (Nettoyage et ajout si inexistant)
+    // 2. Écoles
     const listKey = tenant.originType === EntityType.SCHOOL ? 'schools' : 'internships';
     const cleanOrigin = tenant.originName ? tenant.originName.trim() : '';
     const currentList = updatedOptions[listKey] || [];
@@ -198,7 +210,6 @@ const App: React.FC = () => {
       hasChanges = true;
     }
 
-    // Sauvegarde globale si modifications détectées
     if (hasChanges) {
       setOriginOptions(updatedOptions);
       safeSave('origins', updatedOptions);
@@ -206,20 +217,14 @@ const App: React.FC = () => {
   };
 
   const addTenant = (newTenant: Tenant) => {
-    // Étape 1 : Vérifier et ajouter les nouvelles options aux listes globales
     checkAndSaveNewOptions(newTenant);
-
-    // Étape 2 : Ajouter le locataire
     const updated = [...tenants, newTenant];
     setTenants(updated); 
     safeSave('tenants', updated);
   };
 
   const updateTenant = (updatedTenant: Tenant) => {
-    // Étape 1 : Vérifier et ajouter les nouvelles options aux listes globales
     checkAndSaveNewOptions(updatedTenant);
-
-    // Étape 2 : Mettre à jour le locataire
     const updatedList = tenants.map(t => t.id === updatedTenant.id ? updatedTenant : t);
     setTenants(updatedList);
     safeSave('tenants', updatedList);
@@ -228,12 +233,8 @@ const App: React.FC = () => {
 
   const handleEditClick = (tenant: Tenant) => {
     setEditingTenant(tenant);
-    // Ensure we are on the data tab to see the form
     setActiveTab(Tab.DATA);
-    // Ensure we are viewing the correct list (Tenant vs Prospect) based on the item being edited
     setDataViewMode(tenant.status);
-    
-    // Scroll to top of form smoothly
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -259,16 +260,23 @@ const App: React.FC = () => {
     safeSave('origins', newOptions);
   };
 
+  const updateOriginMetadata = (newMetadata: OriginMetadata) => {
+    setOriginMetadata(newMetadata);
+    safeSave('metadata', newMetadata);
+  };
+
   const handleResetAll = () => {
     if (window.confirm("⚠️ ATTENTION : Cela va effacer TOUTES les données partagées. Êtes-vous certain ?")) {
       setTenants(MOCK_TENANTS);
       setResidenceConfig(DEFAULT_RESIDENCE_CONFIG);
       setOriginOptions(DEFAULT_ORIGIN_OPTIONS);
+      setOriginMetadata({});
       
       if (cloudConnected) {
         safeSave('tenants', MOCK_TENANTS);
         safeSave('config', DEFAULT_RESIDENCE_CONFIG);
         safeSave('origins', DEFAULT_ORIGIN_OPTIONS);
+        safeSave('metadata', {});
       }
     }
   };
@@ -287,6 +295,10 @@ const App: React.FC = () => {
         setOriginOptions(data.origins);
         safeSave('origins', data.origins);
       }
+      if (data.metadata) {
+        setOriginMetadata(data.metadata);
+        safeSave('metadata', data.metadata);
+      }
       alert("Données importées avec succès !");
     } catch (e) {
       console.error(e);
@@ -301,7 +313,6 @@ const App: React.FC = () => {
   const activeTenants = tenants.filter(t => t.status === PersonStatus.TENANT);
   const prospects = tenants.filter(t => t.status === PersonStatus.PROSPECT);
   
-  // Determine which list to show in Data View based on Status AND Search Term
   const filteredByStatus = dataViewMode === PersonStatus.TENANT ? activeTenants : prospects;
   const displayList = filteredByStatus.filter(t => 
     t.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -472,7 +483,7 @@ const App: React.FC = () => {
           {/* Map only uses confirmed TENANTS for now */}
           {activeTab === Tab.MAP && (
             <div className="h-[600px] animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <RelationshipMap tenants={activeTenants} residenceConfig={residenceConfig} />
+              <RelationshipMap tenants={activeTenants} residenceConfig={residenceConfig} originMetadata={originMetadata} />
             </div>
           )}
 
@@ -502,6 +513,9 @@ const App: React.FC = () => {
                  onDisconnectCloud={handleCloudDisconnect}
                  onForcePush={handleForcePushToCloud}
                  isCloudConnected={cloudConnected}
+                 // Passing metadata props
+                 originMetadata={originMetadata}
+                 onUpdateMetadata={updateOriginMetadata}
                />
             </div>
           )}

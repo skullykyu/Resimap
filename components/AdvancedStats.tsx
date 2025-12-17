@@ -232,7 +232,8 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ tenants, residenceConfig 
                 <BarChart data={durationByCursusData} layout="vertical" margin={{ left: 20, right: 30, top: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                   <XAxis type="number" unit=" mois" stroke="#94a3b8" fontSize={12} />
-                  <YAxis dataKey="name" type="category" width={140} tick={{fontSize: 11, fill: '#475569'}} />
+                  {/* Modification width de 140 à 230 pour éviter le chevauchement */}
+                  <YAxis dataKey="name" type="category" width={230} tick={{fontSize: 11, fill: '#475569'}} />
                   <Tooltip content={<DurationTooltip />} cursor={{fill: 'transparent'}} />
                   <Bar dataKey="avgDuration" fill="#4f46e5" radius={[0, 4, 4, 0]} barSize={20} />
                 </BarChart>
