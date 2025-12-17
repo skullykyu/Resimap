@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MOCK_TENANTS, DEFAULT_RESIDENCE_CONFIG, DEFAULT_ORIGIN_OPTIONS, EMBEDDED_FIREBASE_CONFIG } from './constants';
-import { Tenant, ResidenceConfig, PersonStatus, OriginOptions, FirebaseConfig } from './types';
+import { Tenant, ResidenceConfig, PersonStatus, OriginOptions, FirebaseConfig, EntityType } from './types';
 import Dashboard from './components/Dashboard';
 import TenantForm from './components/TenantForm';
 import RelationshipMap from './components/RelationshipMap';
@@ -172,13 +172,50 @@ const App: React.FC = () => {
     window.location.reload(); 
   };
 
+  // --- AUTO-SAVE NEW OPTIONS LOGIC ---
+  const checkAndSaveNewOptions = (tenant: Tenant) => {
+    let updatedOptions = { ...originOptions };
+    let hasChanges = false;
+    
+    // 1. Cursus / Formation (Nettoyage et ajout si inexistant)
+    const cleanCursus = tenant.cursus ? tenant.cursus.trim() : '';
+    if (cleanCursus && !updatedOptions.studyFields.includes(cleanCursus)) {
+      updatedOptions.studyFields = [...updatedOptions.studyFields, cleanCursus].sort();
+      hasChanges = true;
+    }
+
+    // 2. Écoles / Entreprises (Nettoyage et ajout si inexistant)
+    const listKey = tenant.originType === EntityType.SCHOOL ? 'schools' : 'internships';
+    const cleanOrigin = tenant.originName ? tenant.originName.trim() : '';
+    const currentList = updatedOptions[listKey] || [];
+    
+    if (cleanOrigin && !currentList.includes(cleanOrigin)) {
+      updatedOptions[listKey] = [...currentList, cleanOrigin].sort();
+      hasChanges = true;
+    }
+
+    // Sauvegarde globale si modifications détectées
+    if (hasChanges) {
+      setOriginOptions(updatedOptions);
+      safeSave('origins', updatedOptions);
+    }
+  };
+
   const addTenant = (newTenant: Tenant) => {
+    // Étape 1 : Vérifier et ajouter les nouvelles options aux listes globales
+    checkAndSaveNewOptions(newTenant);
+
+    // Étape 2 : Ajouter le locataire
     const updated = [...tenants, newTenant];
     setTenants(updated); 
     safeSave('tenants', updated);
   };
 
   const updateTenant = (updatedTenant: Tenant) => {
+    // Étape 1 : Vérifier et ajouter les nouvelles options aux listes globales
+    checkAndSaveNewOptions(updatedTenant);
+
+    // Étape 2 : Mettre à jour le locataire
     const updatedList = tenants.map(t => t.id === updatedTenant.id ? updatedTenant : t);
     setTenants(updatedList);
     safeSave('tenants', updatedList);

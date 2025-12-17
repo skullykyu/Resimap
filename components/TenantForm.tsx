@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Tenant, ResidenceID, EntityType, ResidenceConfig, PersonStatus, OriginOptions } from '../types';
-import { PlusCircle, Save, UserPlus, UserCheck, School, Building, GraduationCap, X, Pencil } from 'lucide-react';
+import { Tenant, ResidenceID, EntityType, ResidenceConfig, PersonStatus, OriginOptions, Gender } from '../types';
+import { PlusCircle, Save, UserPlus, UserCheck, School, Building, GraduationCap, X, Pencil, User } from 'lucide-react';
 
 interface TenantFormProps {
   onAddTenant: (tenant: Tenant) => void;
@@ -23,6 +23,7 @@ const TenantForm: React.FC<TenantFormProps> = ({
 }) => {
   const [status, setStatus] = useState<PersonStatus>(PersonStatus.TENANT);
   const [name, setName] = useState('');
+  const [gender, setGender] = useState<Gender | undefined>(undefined); // New State
   const [residenceId, setResidenceId] = useState<ResidenceID>(ResidenceID.NORTH);
   
   // Origin management
@@ -47,13 +48,13 @@ const TenantForm: React.FC<TenantFormProps> = ({
       // 1. Basic Fields
       setStatus(editingTenant.status);
       setName(editingTenant.name);
+      setGender(editingTenant.gender); // Set gender
       setResidenceId(editingTenant.residenceId);
       setOriginType(editingTenant.originType);
       setStudyYear(editingTenant.studyYear);
       setDuration(editingTenant.duration || '');
 
       // 2. Complex Origin Logic
-      // Check if the tenant's origin exists in the predefined list for their type
       const optionsForType = editingTenant.originType === EntityType.SCHOOL ? originOptions.schools : originOptions.internships;
       const safeOptions = optionsForType || [];
       
@@ -70,7 +71,6 @@ const TenantForm: React.FC<TenantFormProps> = ({
         setSelectedCursus(editingTenant.cursus);
         setCustomCursus('');
       } else {
-         // Handle case where cursus might be empty or custom
          if (editingTenant.cursus) {
            setSelectedCursus('OTHER');
            setCustomCursus(editingTenant.cursus);
@@ -83,8 +83,7 @@ const TenantForm: React.FC<TenantFormProps> = ({
     } else {
       // RESET FORM (Create Mode)
       setName('');
-      // Keep previous residence/status as user convenience? Or reset? Let's reset for clarity.
-      // setResidenceId(ResidenceID.NORTH); 
+      setGender(undefined);
       setSelectedOrigin('');
       setCustomOrigin('');
       setSelectedCursus('');
@@ -92,28 +91,25 @@ const TenantForm: React.FC<TenantFormProps> = ({
       setStudyYear('');
       setDuration('');
     }
-  }, [editingTenant, originOptions]); // Re-run when editingTenant changes
-
-  // Reset selected origin when switching type (only if not editing, or if user manually switches)
-  useEffect(() => {
-    // If we are editing, we don't want to clear this when the component mounts/updates unless user interacts
-    // Simple logic: If current selected doesn't match type, clear it.
-    // However, to keep it simple and avoid bugs during edit population, we'll skip this effect for now or handle it carefully.
-    // Let's rely on manual user change for now.
-  }, [originType]);
+  }, [editingTenant, originOptions]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     // Determine final origin name
-    const finalOriginName = selectedOrigin === 'OTHER' ? customOrigin : selectedOrigin;
-    const finalCursus = selectedCursus === 'OTHER' ? customCursus : selectedCursus;
+    const rawOriginName = selectedOrigin === 'OTHER' ? customOrigin : selectedOrigin;
+    const rawCursus = selectedCursus === 'OTHER' ? customCursus : selectedCursus;
     
-    if (!name || !finalOriginName || !finalCursus) return;
+    const finalOriginName = rawOriginName.trim();
+    const finalCursus = rawCursus.trim();
+    const finalName = name.trim();
+
+    if (!finalName || !finalOriginName || !finalCursus) return;
 
     const tenantData: Tenant = {
-      id: editingTenant ? editingTenant.id : Date.now().toString(), // Keep ID if editing
-      name,
+      id: editingTenant ? editingTenant.id : Date.now().toString(),
+      name: finalName,
+      gender: gender, // Add gender to object
       residenceId,
       originName: finalOriginName,
       originType,
@@ -130,14 +126,22 @@ const TenantForm: React.FC<TenantFormProps> = ({
     }
     
     if (!editingTenant) {
-        // Only clear if adding. If updating, usually the parent component will clear editingTenant which triggers the useEffect reset.
         setName('');
+        setGender(undefined);
         setSelectedOrigin('');
         setCustomOrigin('');
         setSelectedCursus('');
         setCustomCursus('');
         setStudyYear('');
         setDuration('');
+    }
+  };
+
+  const toggleGender = (selected: Gender) => {
+    if (gender === selected) {
+      setGender(undefined); // Deselect if already selected
+    } else {
+      setGender(selected);
     }
   };
 
@@ -205,6 +209,49 @@ const TenantForm: React.FC<TenantFormProps> = ({
           />
         </div>
 
+        {/* GENDER SELECTION (Optional) */}
+        <div className="space-y-1">
+           <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+             <User className="w-4 h-4 text-slate-500" />
+             Sexe <span className="text-slate-400 font-normal text-xs">(Facultatif)</span>
+           </label>
+           <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => toggleGender(Gender.MALE)}
+                className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium border transition-all ${
+                  gender === Gender.MALE
+                  ? 'bg-blue-50 text-blue-700 border-blue-300 ring-1 ring-blue-300'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                Homme
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleGender(Gender.FEMALE)}
+                className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium border transition-all ${
+                  gender === Gender.FEMALE
+                  ? 'bg-pink-50 text-pink-700 border-pink-300 ring-1 ring-pink-300'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                Femme
+              </button>
+               <button
+                type="button"
+                onClick={() => toggleGender(Gender.OTHER)}
+                className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium border transition-all ${
+                  gender === Gender.OTHER
+                  ? 'bg-purple-50 text-purple-700 border-purple-300 ring-1 ring-purple-300'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                Autre
+              </button>
+           </div>
+        </div>
+
         <div className="space-y-1">
           <label className="text-sm font-medium text-slate-700">Résidence Visée / Actuelle</label>
           <select
@@ -228,7 +275,6 @@ const TenantForm: React.FC<TenantFormProps> = ({
                 checked={originType === EntityType.SCHOOL} 
                 onChange={() => {
                   setOriginType(EntityType.SCHOOL);
-                  // Clear selection if switching types manually
                   if (!isEditing) setSelectedOrigin('');
                 }}
                 className="text-indigo-600 focus:ring-indigo-500"
@@ -287,7 +333,7 @@ const TenantForm: React.FC<TenantFormProps> = ({
           )}
         </div>
 
-        {/* 2. CURSUS SELECTION (NEW) */}
+        {/* 2. CURSUS SELECTION */}
         <div className="space-y-1">
           <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
              <GraduationCap className="w-4 h-4 text-slate-500" />

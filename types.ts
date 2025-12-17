@@ -15,6 +15,12 @@ export enum PersonStatus {
   PROSPECT = "Nouveau Contact"
 }
 
+export enum Gender {
+  MALE = "Homme",
+  FEMALE = "Femme",
+  OTHER = "Autre"
+}
+
 export interface ResidenceConfig {
   id: ResidenceID;
   name: string;
@@ -31,6 +37,7 @@ export interface OriginOptions {
 export interface Tenant {
   id: string;
   name: string;
+  gender?: Gender; // Nouveau champ facultatif
   residenceId: ResidenceID;
   originName: string;
   originType: EntityType;
