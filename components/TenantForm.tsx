@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Tenant, ResidenceID, EntityType, ResidenceConfig, PersonStatus, OriginOptions, Gender } from '../types';
-import { PlusCircle, Save, UserPlus, UserCheck, School, Building, GraduationCap, X, Pencil, User } from 'lucide-react';
+import { PlusCircle, Save, UserPlus, UserCheck, School, Building, GraduationCap, X, Pencil, User, Calendar, ArrowRight } from 'lucide-react';
 
 interface TenantFormProps {
   onAddTenant: (tenant: Tenant) => void;
@@ -23,7 +23,7 @@ const TenantForm: React.FC<TenantFormProps> = ({
 }) => {
   const [status, setStatus] = useState<PersonStatus>(PersonStatus.TENANT);
   const [name, setName] = useState('');
-  const [gender, setGender] = useState<Gender | undefined>(undefined); // New State
+  const [gender, setGender] = useState<Gender | undefined>(undefined);
   const [residenceId, setResidenceId] = useState<ResidenceID>(ResidenceID.NORTH);
   
   // Origin management
@@ -36,6 +36,8 @@ const TenantForm: React.FC<TenantFormProps> = ({
   const [customCursus, setCustomCursus] = useState('');
 
   const [studyYear, setStudyYear] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState(''); // New State
   const [duration, setDuration] = useState('');
 
   // Safe fallback to [] if lists are undefined
@@ -48,10 +50,12 @@ const TenantForm: React.FC<TenantFormProps> = ({
       // 1. Basic Fields
       setStatus(editingTenant.status);
       setName(editingTenant.name);
-      setGender(editingTenant.gender); // Set gender
+      setGender(editingTenant.gender);
       setResidenceId(editingTenant.residenceId);
       setOriginType(editingTenant.originType);
       setStudyYear(editingTenant.studyYear);
+      setStartDate(editingTenant.startDate || '');
+      setEndDate(editingTenant.endDate || ''); // Set End Date
       setDuration(editingTenant.duration || '');
 
       // 2. Complex Origin Logic
@@ -89,6 +93,8 @@ const TenantForm: React.FC<TenantFormProps> = ({
       setSelectedCursus('');
       setCustomCursus('');
       setStudyYear('');
+      setStartDate('');
+      setEndDate('');
       setDuration('');
     }
   }, [editingTenant, originOptions]);
@@ -109,12 +115,14 @@ const TenantForm: React.FC<TenantFormProps> = ({
     const tenantData: Tenant = {
       id: editingTenant ? editingTenant.id : Date.now().toString(),
       name: finalName,
-      gender: gender, // Add gender to object
+      gender: gender,
       residenceId,
       originName: finalOriginName,
       originType,
       cursus: finalCursus,
       studyYear,
+      startDate: startDate,
+      endDate: endDate, // Save end date
       duration: duration, 
       status: status
     };
@@ -133,6 +141,8 @@ const TenantForm: React.FC<TenantFormProps> = ({
         setSelectedCursus('');
         setCustomCursus('');
         setStudyYear('');
+        setStartDate('');
+        setEndDate('');
         setDuration('');
     }
   };
@@ -377,9 +387,36 @@ const TenantForm: React.FC<TenantFormProps> = ({
           />
         </div>
 
+        <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-slate-500" />
+              Début de bail
+            </label>
+            <input
+              type="date"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+              <ArrowRight className="w-4 h-4 text-slate-500" />
+              Fin / Départ
+            </label>
+            <input
+              type="date"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
+        </div>
+
         {status === PersonStatus.TENANT && (
           <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-300">
-            <label className="text-sm font-medium text-slate-700">Durée du bail</label>
+            <label className="text-sm font-medium text-slate-700">Durée estimée (si pas de dates)</label>
             <input
               type="text"
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"

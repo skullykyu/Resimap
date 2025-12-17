@@ -43,6 +43,8 @@ export interface Tenant {
   originType: EntityType;
   cursus: string; // Nouveau champ Cursus
   studyYear: string;
+  startDate?: string; // Nouveau champ : Date de début de bail (YYYY-MM-DD)
+  endDate?: string;   // Nouveau champ : Date de fin de bail (YYYY-MM-DD)
   duration?: string;
   status: PersonStatus;
   email?: string;

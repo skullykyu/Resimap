@@ -36,22 +36,30 @@ export const DEFAULT_ORIGIN_OPTIONS: OriginOptions = {
   ]
 };
 
+// Dates calculées pour avoir des données cohérentes en "temps réel"
+const now = new Date();
+const dateMinusMonths = (months: number) => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - months);
+  return d.toISOString().split('T')[0];
+};
+
 export const MOCK_TENANTS: Tenant[] = [
-  { id: '1', name: 'Alice D.', gender: Gender.FEMALE, residenceId: ResidenceID.NORTH, originName: 'Université des Sciences', originType: EntityType.SCHOOL, cursus: 'Sciences (Bio, Physique...)', studyYear: 'Master 1', duration: '2 ans', status: PersonStatus.TENANT },
-  { id: '2', name: 'Bob M.', gender: Gender.MALE, residenceId: ResidenceID.NORTH, originName: 'Université des Sciences', originType: EntityType.SCHOOL, cursus: 'Informatique / Numérique', studyYear: 'Licence 3', duration: '10 mois', status: PersonStatus.TENANT },
-  { id: '3', name: 'Charlie P.', residenceId: ResidenceID.NORTH, originName: 'IUT Informatique', originType: EntityType.SCHOOL, cursus: 'Informatique / Numérique', studyYear: 'BUT 2', duration: '1 an', status: PersonStatus.TENANT },
-  { id: '4', name: 'Diane L.', gender: Gender.FEMALE, residenceId: ResidenceID.SOUTH, originName: 'Business School A', originType: EntityType.SCHOOL, cursus: 'Commerce / Marketing', studyYear: 'Master 2', duration: '6 mois', status: PersonStatus.TENANT },
-  { id: '5', name: 'Evan R.', residenceId: ResidenceID.SOUTH, originName: 'Business School A', originType: EntityType.SCHOOL, cursus: 'Commerce / Marketing', studyYear: 'Master 1', duration: '2 ans', status: PersonStatus.TENANT },
-  { id: '6', name: 'Fanny G.', residenceId: ResidenceID.SOUTH, originName: 'Design Institute', originType: EntityType.SCHOOL, cursus: 'Arts / Design', studyYear: 'Licence 1', status: PersonStatus.TENANT },
-  { id: '7', name: 'Gael H.', residenceId: ResidenceID.CENTER, originName: 'École d\'Art', originType: EntityType.SCHOOL, cursus: 'Arts / Design', studyYear: 'Master 1', duration: '12 mois', status: PersonStatus.TENANT },
-  { id: '8', name: 'Hugo J.', residenceId: ResidenceID.CENTER, originName: 'Tech Startup Hub', originType: EntityType.INTERNSHIP, cursus: 'Informatique / Numérique', studyYear: 'Stage', duration: '6 mois', status: PersonStatus.TENANT },
-  { id: '9', name: 'Ines K.', residenceId: ResidenceID.CENTER, originName: 'Faculté de Droit', originType: EntityType.SCHOOL, cursus: 'Droit / Sciences Po', studyYear: 'Licence 2', duration: '9 mois', status: PersonStatus.TENANT },
-  { id: '10', name: 'Jean L.', gender: Gender.MALE, residenceId: ResidenceID.EAST, originName: 'Faculté de Médecine', originType: EntityType.SCHOOL, cursus: 'Médecine / Santé', studyYear: 'Interne', duration: '3 ans', status: PersonStatus.TENANT },
-  { id: '11', name: 'Kevin M.', residenceId: ResidenceID.EAST, originName: 'Hôpital CHU', originType: EntityType.INTERNSHIP, cursus: 'Médecine / Santé', studyYear: 'Stage', duration: '4 mois', status: PersonStatus.TENANT },
-  { id: '12', name: 'Lea N.', residenceId: ResidenceID.EAST, originName: 'Faculté de Médecine', originType: EntityType.SCHOOL, cursus: 'Médecine / Santé', studyYear: '5ème année', status: PersonStatus.TENANT },
-  { id: '13', name: 'Marc O.', residenceId: ResidenceID.NORTH, originName: 'École d\'Ingénieurs Z', originType: EntityType.SCHOOL, cursus: 'Ingénierie', studyYear: '3ème année', duration: '3 ans', status: PersonStatus.TENANT },
-  { id: '14', name: 'Nina P.', residenceId: ResidenceID.NORTH, originName: 'École d\'Ingénieurs Z', originType: EntityType.SCHOOL, cursus: 'Ingénierie', studyYear: '4ème année', status: PersonStatus.TENANT },
-  { id: '15', name: 'Oscar Q.', residenceId: ResidenceID.SOUTH, originName: 'Banque Populaire Siege', originType: EntityType.INTERNSHIP, cursus: 'Commerce / Marketing', studyYear: 'Alternance', duration: '1 an', status: PersonStatus.TENANT },
+  { id: '1', name: 'Alice D.', gender: Gender.FEMALE, residenceId: ResidenceID.NORTH, originName: 'Université des Sciences', originType: EntityType.SCHOOL, cursus: 'Sciences (Bio, Physique...)', studyYear: 'Master 1', startDate: dateMinusMonths(24), endDate: dateMinusMonths(1), duration: '2 ans', status: PersonStatus.TENANT },
+  { id: '2', name: 'Bob M.', gender: Gender.MALE, residenceId: ResidenceID.NORTH, originName: 'Université des Sciences', originType: EntityType.SCHOOL, cursus: 'Informatique / Numérique', studyYear: 'Licence 3', startDate: dateMinusMonths(10), duration: '10 mois', status: PersonStatus.TENANT },
+  { id: '3', name: 'Charlie P.', residenceId: ResidenceID.NORTH, originName: 'IUT Informatique', originType: EntityType.SCHOOL, cursus: 'Informatique / Numérique', studyYear: 'BUT 2', startDate: dateMinusMonths(12), duration: '1 an', status: PersonStatus.TENANT },
+  { id: '4', name: 'Diane L.', gender: Gender.FEMALE, residenceId: ResidenceID.SOUTH, originName: 'Business School A', originType: EntityType.SCHOOL, cursus: 'Commerce / Marketing', studyYear: 'Master 2', startDate: dateMinusMonths(6), duration: '6 mois', status: PersonStatus.TENANT },
+  { id: '5', name: 'Evan R.', residenceId: ResidenceID.SOUTH, originName: 'Business School A', originType: EntityType.SCHOOL, cursus: 'Commerce / Marketing', studyYear: 'Master 1', startDate: dateMinusMonths(24), duration: '2 ans', status: PersonStatus.TENANT },
+  { id: '6', name: 'Fanny G.', residenceId: ResidenceID.SOUTH, originName: 'Design Institute', originType: EntityType.SCHOOL, cursus: 'Arts / Design', studyYear: 'Licence 1', startDate: dateMinusMonths(2), status: PersonStatus.TENANT },
+  { id: '7', name: 'Gael H.', residenceId: ResidenceID.CENTER, originName: 'École d\'Art', originType: EntityType.SCHOOL, cursus: 'Arts / Design', studyYear: 'Master 1', startDate: dateMinusMonths(12), duration: '12 mois', status: PersonStatus.TENANT },
+  { id: '8', name: 'Hugo J.', residenceId: ResidenceID.CENTER, originName: 'Tech Startup Hub', originType: EntityType.INTERNSHIP, cursus: 'Informatique / Numérique', studyYear: 'Stage', startDate: dateMinusMonths(6), duration: '6 mois', status: PersonStatus.TENANT },
+  { id: '9', name: 'Ines K.', residenceId: ResidenceID.CENTER, originName: 'Faculté de Droit', originType: EntityType.SCHOOL, cursus: 'Droit / Sciences Po', studyYear: 'Licence 2', startDate: dateMinusMonths(9), duration: '9 mois', status: PersonStatus.TENANT },
+  { id: '10', name: 'Jean L.', gender: Gender.MALE, residenceId: ResidenceID.EAST, originName: 'Faculté de Médecine', originType: EntityType.SCHOOL, cursus: 'Médecine / Santé', studyYear: 'Interne', startDate: dateMinusMonths(36), duration: '3 ans', status: PersonStatus.TENANT },
+  { id: '11', name: 'Kevin M.', residenceId: ResidenceID.EAST, originName: 'Hôpital CHU', originType: EntityType.INTERNSHIP, cursus: 'Médecine / Santé', studyYear: 'Stage', startDate: dateMinusMonths(4), duration: '4 mois', status: PersonStatus.TENANT },
+  { id: '12', name: 'Lea N.', residenceId: ResidenceID.EAST, originName: 'Faculté de Médecine', originType: EntityType.SCHOOL, cursus: 'Médecine / Santé', studyYear: '5ème année', startDate: dateMinusMonths(60), status: PersonStatus.TENANT },
+  { id: '13', name: 'Marc O.', residenceId: ResidenceID.NORTH, originName: 'École d\'Ingénieurs Z', originType: EntityType.SCHOOL, cursus: 'Ingénierie', studyYear: '3ème année', startDate: dateMinusMonths(36), duration: '3 ans', status: PersonStatus.TENANT },
+  { id: '14', name: 'Nina P.', residenceId: ResidenceID.NORTH, originName: 'École d\'Ingénieurs Z', originType: EntityType.SCHOOL, cursus: 'Ingénierie', studyYear: '4ème année', startDate: dateMinusMonths(48), status: PersonStatus.TENANT },
+  { id: '15', name: 'Oscar Q.', residenceId: ResidenceID.SOUTH, originName: 'Banque Populaire Siege', originType: EntityType.INTERNSHIP, cursus: 'Commerce / Marketing', studyYear: 'Alternance', startDate: dateMinusMonths(12), duration: '1 an', status: PersonStatus.TENANT },
   // Nouveaux contacts exemples
   { id: '101', name: 'Thomas V.', gender: Gender.MALE, residenceId: ResidenceID.CENTER, originName: 'École d\'Art', originType: EntityType.SCHOOL, cursus: 'Arts / Design', studyYear: 'Terminale', status: PersonStatus.PROSPECT },
   { id: '102', name: 'Sarah B.', gender: Gender.FEMALE, residenceId: ResidenceID.NORTH, originName: 'Lycée International', originType: EntityType.SCHOOL, cursus: 'Lettres / Langues', studyYear: 'Terminale', status: PersonStatus.PROSPECT },

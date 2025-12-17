@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Tenant, ResidenceConfig, Gender, PersonStatus } from '../types';
-import { Filter, Users, Clock, GraduationCap, BarChart3 } from 'lucide-react';
+import { Filter, Users, Clock, GraduationCap, BarChart3, Info } from 'lucide-react';
 
 interface AdvancedStatsProps {
   tenants: Tenant[];
@@ -9,7 +9,7 @@ interface AdvancedStatsProps {
 }
 
 // Helper to parse "2 ans", "9 mois" etc into months
-const parseDurationToMonths = (durationStr?: string): number => {
+const parseDurationString = (durationStr?: string): number => {
   if (!durationStr) return 0;
   
   const str = durationStr.toLowerCase().trim();
@@ -24,6 +24,38 @@ const parseDurationToMonths = (durationStr?: string): number => {
   return value; // Assume months by default if number found
 };
 
+// Nouvelle fonction qui calcule le nombre de mois depuis une date donnée
+const calculateMonthsSince = (startDateStr: string): number => {
+  const start = new Date(startDateStr);
+  const now = new Date();
+  
+  // Basic validation
+  if (isNaN(start.getTime())) return 0;
+
+  // Différence en mois
+  let months = (now.getFullYear() - start.getFullYear()) * 12;
+  months -= start.getMonth();
+  months += now.getMonth();
+  
+  // On s'assure d'avoir au moins 0, voire 1 si c'est le mois en cours
+  return Math.max(0, months) + (now.getDate() >= start.getDate() ? 0 : -1) + (months === 0 ? 1 : 0);
+};
+
+// Nouvelle fonction qui calcule la durée entre deux dates
+const calculateMonthsBetween = (startStr: string, endStr: string): number => {
+  const start = new Date(startStr);
+  const end = new Date(endStr);
+  
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+  
+  let months = (end.getFullYear() - start.getFullYear()) * 12;
+  months -= start.getMonth();
+  months += end.getMonth();
+  
+  // On s'assure d'avoir au moins 0, voire 1 si c'est le mois en cours
+  return Math.max(0, months) + (end.getDate() >= start.getDate() ? 0 : -1) + (months === 0 ? 1 : 0);
+};
+
 const AdvancedStats: React.FC<AdvancedStatsProps> = ({ tenants, residenceConfig }) => {
   const [filterId, setFilterId] = useState<string>('ALL');
 
@@ -35,6 +67,25 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ tenants, residenceConfig 
     }
     return list;
   }, [tenants, filterId]);
+
+  // Helper to determine the effective duration for a tenant
+  const getEffectiveDuration = (t: Tenant): number => {
+    // Priority 1: Real calculation if Start AND End dates exist
+    if (t.startDate && t.endDate) {
+      const exactMonths = calculateMonthsBetween(t.startDate, t.endDate);
+      if (exactMonths > 0) return exactMonths;
+    }
+
+    // Priority 2: Real-time calculation from Start Date (if still active/no end date)
+    if (t.startDate) {
+      const realMonths = calculateMonthsSince(t.startDate);
+      // Si la durée calculée est cohérente (>0), on l'utilise
+      if (realMonths > 0) return realMonths;
+    }
+    
+    // Fallback: Static string duration
+    return parseDurationString(t.duration);
+  };
 
   // 2. Data Processing: Gender Distribution
   const genderData = useMemo(() => {
@@ -59,7 +110,7 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ tenants, residenceConfig 
     const cursusStats: Record<string, { totalMonths: number, count: number }> = {};
     
     filteredTenants.forEach(t => {
-      const months = parseDurationToMonths(t.duration);
+      const months = getEffectiveDuration(t);
       if (months > 0 && t.cursus) {
         if (!cursusStats[t.cursus]) {
           cursusStats[t.cursus] = { totalMonths: 0, count: 0 };
@@ -84,7 +135,7 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ tenants, residenceConfig 
     const genderStats: Record<string, { totalMonths: number, count: number }> = {};
     
     filteredTenants.forEach(t => {
-      const months = parseDurationToMonths(t.duration);
+      const months = getEffectiveDuration(t);
       if (months > 0) {
         const key = t.gender === Gender.MALE ? 'Hommes' 
                   : t.gender === Gender.FEMALE ? 'Femmes' 
@@ -153,6 +204,14 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ tenants, residenceConfig 
         </div>
       </div>
 
+      <div className="bg-blue-50 text-blue-800 p-4 rounded-lg flex items-start gap-3 text-sm">
+        <Info className="w-5 h-5 flex-shrink-0 mt-0.5" />
+        <p>
+          <strong>Note sur les calculs :</strong> L'ancienneté (durée de bail) est désormais calculée de manière précise si les dates d'entrée et de sortie sont renseignées.
+          Le système privilégie ces dates réelles sur la durée déclarative.
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* CHART 1: DURATION VS CURSUS */}
@@ -162,7 +221,7 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ tenants, residenceConfig 
                <Clock className="w-5 h-5" />
              </div>
              <div>
-               <h3 className="font-bold text-slate-800">Durée Moyenne du Bail par Cursus</h3>
+               <h3 className="font-bold text-slate-800">Ancienneté / Durée Moyenne par Cursus</h3>
                <p className="text-xs text-slate-500">Les étudiants de quelles filières restent le plus longtemps ?</p>
              </div>
           </div>

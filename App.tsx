@@ -8,7 +8,7 @@ import MarketingAdvisor from './components/MarketingAdvisor';
 import Settings from './components/Settings';
 import AdvancedStats from './components/AdvancedStats'; // Import du nouveau composant
 import { initFirebase, subscribeToData, saveToFirebase, isFirebaseInitialized } from './services/firebase';
-import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock, Lock, Globe, Users2, Pencil, PieChart as PieChartIcon } from 'lucide-react';
+import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock, Lock, Globe, Users2, Pencil, PieChart as PieChartIcon, Search } from 'lucide-react';
 
 enum Tab {
   DASHBOARD = 'tableau_de_bord',
@@ -46,6 +46,8 @@ const App: React.FC = () => {
   
   // State for Data View sub-tab
   const [dataViewMode, setDataViewMode] = useState<PersonStatus>(PersonStatus.TENANT);
+  // Search State
+  const [searchTerm, setSearchTerm] = useState('');
   
   // EDIT MODE STATE
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
@@ -299,8 +301,11 @@ const App: React.FC = () => {
   const activeTenants = tenants.filter(t => t.status === PersonStatus.TENANT);
   const prospects = tenants.filter(t => t.status === PersonStatus.PROSPECT);
   
-  // Determine which list to show in Data View
-  const displayList = dataViewMode === PersonStatus.TENANT ? activeTenants : prospects;
+  // Determine which list to show in Data View based on Status AND Search Term
+  const filteredByStatus = dataViewMode === PersonStatus.TENANT ? activeTenants : prospects;
+  const displayList = filteredByStatus.filter(t => 
+    t.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen flex bg-slate-50 text-slate-900 font-sans">
@@ -516,6 +521,20 @@ const App: React.FC = () => {
               
               <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                 
+                {/* Search Header added above tabs */}
+                <div className="p-4 border-b border-slate-100 bg-slate-50">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input 
+                            type="text" 
+                            placeholder="Rechercher par nom ou prénom..." 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                        />
+                    </div>
+                </div>
+
                 {/* Sub-tabs for Tenant vs Prospect Table */}
                 <div className="flex border-b border-slate-200">
                   <button
@@ -550,7 +569,7 @@ const App: React.FC = () => {
                         <th className="px-4 py-3">Résidence</th>
                         <th className="px-4 py-3">Provenance</th>
                         <th className="px-4 py-3">Cursus</th>
-                        {dataViewMode === PersonStatus.TENANT && <th className="px-4 py-3">Durée</th>}
+                        {dataViewMode === PersonStatus.TENANT && <th className="px-4 py-3">Début / Durée</th>}
                         <th className="px-4 py-3 text-right">Action</th>
                       </tr>
                     </thead>
@@ -558,7 +577,7 @@ const App: React.FC = () => {
                       {displayList.length === 0 && (
                         <tr>
                           <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                            Aucune donnée trouvée dans cette catégorie.
+                            {searchTerm ? "Aucun résultat pour cette recherche." : "Aucune donnée trouvée dans cette catégorie."}
                           </td>
                         </tr>
                       )}
@@ -592,7 +611,18 @@ const App: React.FC = () => {
                           </td>
                           {dataViewMode === PersonStatus.TENANT && (
                              <td className="px-4 py-3 text-xs text-slate-500">
-                              {t.duration || <span className="text-slate-300 italic">N/A</span>}
+                              <div className="flex flex-col">
+                                {t.startDate && t.endDate ? (
+                                   <span className="text-emerald-600 font-medium">
+                                     {new Date(t.startDate).toLocaleDateString()} - {new Date(t.endDate).toLocaleDateString()}
+                                   </span>
+                                ) : t.startDate ? (
+                                   <span className="text-indigo-600 font-medium">Depuis : {new Date(t.startDate).toLocaleDateString()}</span>
+                                ) : null}
+                                <span className={t.startDate ? "text-slate-400 text-[10px]" : ""}>
+                                  {t.duration || <span className="text-slate-300 italic">N/A</span>}
+                                </span>
+                              </div>
                             </td>
                           )}
                           <td className="px-4 py-3 text-right">
