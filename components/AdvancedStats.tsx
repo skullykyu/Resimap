@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Tenant, ResidenceConfig, Gender, PersonStatus } from '../types';
-import { Filter, Users, Clock, GraduationCap, BarChart3, Info } from 'lucide-react';
+import { Filter, Users, Clock, GraduationCap, BarChart3, Info, List, Building } from 'lucide-react';
 
 interface AdvancedStatsProps {
   tenants: Tenant[];
@@ -67,6 +67,44 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ tenants, residenceConfig 
     }
     return list;
   }, [tenants, filterId]);
+
+  // --- PREPARE DATA FOR DETAILED TABLES (Schools & Cursus) ---
+  const totalFiltered = filteredTenants.length;
+
+  const { fullSchoolsList, fullCursusList } = useMemo(() => {
+    // 1. Schools / Origins Counts
+    const originCounts: Record<string, number> = {};
+    filteredTenants.forEach(t => {
+      originCounts[t.originName] = (originCounts[t.originName] || 0) + 1;
+    });
+
+    const schoolsList = Object.entries(originCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({
+        name,
+        count,
+        percentage: totalFiltered > 0 ? ((count / totalFiltered) * 100).toFixed(1) : '0'
+      }));
+
+    // 2. Cursus Counts
+    const cursusCounts: Record<string, number> = {};
+    filteredTenants.forEach(t => {
+      if (t.cursus) {
+        cursusCounts[t.cursus] = (cursusCounts[t.cursus] || 0) + 1;
+      }
+    });
+
+    const cursusList = Object.entries(cursusCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({
+        name,
+        count,
+        percentage: totalFiltered > 0 ? ((count / totalFiltered) * 100).toFixed(1) : '0'
+      }));
+
+    return { fullSchoolsList: schoolsList, fullCursusList: cursusList };
+  }, [filteredTenants, totalFiltered]);
+
 
   // Helper to determine the effective duration for a tenant
   const getEffectiveDuration = (t: Tenant): number => {
@@ -323,7 +361,80 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ tenants, residenceConfig 
              )}
            </div>
         </div>
+      </div>
 
+      {/* DETAILED LISTS SECTION (COPIED FROM DASHBOARD) */}
+      <div className="mt-8 pb-8">
+         <div className="flex items-center gap-2 mb-4">
+           <List className="w-5 h-5 text-indigo-600" />
+           <h3 className="text-lg font-bold text-slate-800">Détails Complets des Effectifs (Selon filtres)</h3>
+         </div>
+         
+         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+           
+           {/* SCHOOLS FULL LIST */}
+           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[500px]">
+             <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2 sticky top-0">
+               <Building className="w-4 h-4 text-slate-500" />
+               <h4 className="font-semibold text-slate-700">Répartition par École / Entreprise</h4>
+             </div>
+             <div className="overflow-y-auto p-0 flex-grow">
+               <table className="w-full text-left text-sm">
+                 <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 shadow-sm">
+                   <tr>
+                     <th className="px-4 py-2">Nom</th>
+                     <th className="px-4 py-2 text-right">Nb.</th>
+                     <th className="px-4 py-2 text-right">%</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100">
+                    {fullSchoolsList.length === 0 && (
+                      <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-400 italic">Aucune donnée</td></tr>
+                    )}
+                    {fullSchoolsList.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-4 py-2 text-slate-800 font-medium">{item.name}</td>
+                        <td className="px-4 py-2 text-right text-indigo-600 font-bold">{item.count}</td>
+                        <td className="px-4 py-2 text-right text-slate-500 text-xs">{item.percentage}%</td>
+                      </tr>
+                    ))}
+                 </tbody>
+               </table>
+             </div>
+           </div>
+
+           {/* CURSUS FULL LIST */}
+           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[500px]">
+             <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2 sticky top-0">
+               <GraduationCap className="w-4 h-4 text-slate-500" />
+               <h4 className="font-semibold text-slate-700">Répartition par Cursus / Filière</h4>
+             </div>
+             <div className="overflow-y-auto p-0 flex-grow">
+               <table className="w-full text-left text-sm">
+                 <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 shadow-sm">
+                   <tr>
+                     <th className="px-4 py-2">Intitulé</th>
+                     <th className="px-4 py-2 text-right">Nb.</th>
+                     <th className="px-4 py-2 text-right">%</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100">
+                    {fullCursusList.length === 0 && (
+                      <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-400 italic">Aucune donnée</td></tr>
+                    )}
+                    {fullCursusList.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-4 py-2 text-slate-800 font-medium">{item.name}</td>
+                        <td className="px-4 py-2 text-right text-indigo-600 font-bold">{item.count}</td>
+                        <td className="px-4 py-2 text-right text-slate-500 text-xs">{item.percentage}%</td>
+                      </tr>
+                    ))}
+                 </tbody>
+               </table>
+             </div>
+           </div>
+
+         </div>
       </div>
     </div>
   );

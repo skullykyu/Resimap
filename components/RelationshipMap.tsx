@@ -12,39 +12,32 @@ interface RelationshipMapProps {
 
 // Heuristic to convert "10 min", "5 km", etc. to pixels
 const parseDistanceToPixels = (distStr?: string): number => {
-  if (!distStr) return 150; // Default D3 distance
+  if (!distStr) return 120; // Default D3 distance (slightly reduced for compactness)
 
   const str = distStr.toLowerCase().replace(/\s/g, '');
   let value = 0;
   
   const matchNum = str.match(/(\d+)/);
-  if (!matchNum) return 150;
+  if (!matchNum) return 120;
   
   value = parseInt(matchNum[0], 10);
 
   // Time-based (walking/tram)
   if (str.includes('min') || str.includes('mna')) {
-    // 1 min = 10 px. 
-    // 5 min = 50px (close)
-    // 30 min = 300px (far)
-    return Math.max(50, Math.min(value * 10, 500));
+    return Math.max(40, Math.min(value * 10, 400));
   }
 
   // Distance-based (km)
   if (str.includes('km')) {
-    // 1 km = 30px
-    // 5 km = 150px
-    // 10 km = 300px
-    return Math.max(50, Math.min(value * 30, 500));
+    return Math.max(40, Math.min(value * 30, 400));
   }
 
   // Distance-based (meters)
   if (str.includes('m') && !str.includes('km')) {
-    // 500m = 50px
-    return Math.max(40, Math.min(value / 10, 200));
+    return Math.max(30, Math.min(value / 10, 150));
   }
 
-  return 150;
+  return 120;
 };
 
 const RelationshipMap: React.FC<RelationshipMapProps> = ({ tenants, residenceConfig, originMetadata = {} }) => {
@@ -70,12 +63,14 @@ const RelationshipMap: React.FC<RelationshipMapProps> = ({ tenants, residenceCon
     // Helper map for quick lookup
     const configMap = new Map<string, ResidenceConfig>(residenceConfig.map(r => [r.id, r]));
 
-    // 1. Process Data
-    const residenceIds = Array.from(new Set(tenants.map(t => t.residenceId)));
-    const origins = Array.from(new Set(tenants.map(t => t.originName)));
+    // 1. Process Data - INDEPENDENT CONSTELLATIONS
+    // We want unique nodes for each residence, BUT also unique origin nodes PER residence.
+    // If "University A" is in Res 1 and Res 2, it should appear twice as distinct nodes.
 
-    const nodes: NodeData[] = [
-      ...residenceIds.map((rid) => {
+    const residenceIds = Array.from(new Set(tenants.map(t => t.residenceId)));
+    
+    // Nodes for Residences (Group 1)
+    const residenceNodes: NodeData[] = residenceIds.map((rid) => {
         const idStr = rid as string;
         return { 
           id: idStr, 
@@ -84,22 +79,34 @@ const RelationshipMap: React.FC<RelationshipMapProps> = ({ tenants, residenceCon
           value: 20,
           color: configMap.get(idStr)?.color 
         };
-      }),
-      ...origins.map((o) => {
-        const oStr = o as string;
-        return { 
-          id: oStr, 
-          label: oStr,
-          group: 2, 
-          value: 5,
-          color: SCHOOL_COLOR
-        };
-      })
-    ];
+    });
 
+    // Nodes for Origins (Group 2) - KEY CHANGE HERE
+    // Instead of a unique set of origin names, we create a composite ID: "RES_ID::ORIGIN_NAME"
+    const originNodesMap = new Map<string, NodeData>();
     const links: any[] = [];
+
     tenants.forEach(t => {
-      const existingLink = links.find(l => l.source === t.residenceId && l.target === t.originName);
+      // Create a unique ID for this school specifically for this residence
+      // allowing distinct constellations
+      const compositeId = `${t.residenceId}::${t.originName}`;
+      
+      // Node creation
+      if (!originNodesMap.has(compositeId)) {
+        originNodesMap.set(compositeId, {
+          id: compositeId,
+          label: t.originName, // Visual label remains just the name
+          group: 2,
+          value: 1,
+          color: SCHOOL_COLOR
+        });
+      } else {
+        const node = originNodesMap.get(compositeId);
+        if (node) node.value++;
+      }
+
+      // Link creation (Check if link already exists for this tenant count)
+      const existingLink = links.find(l => l.source === t.residenceId && l.target === compositeId);
       if (existingLink) {
         existingLink.value++;
       } else {
@@ -108,15 +115,19 @@ const RelationshipMap: React.FC<RelationshipMapProps> = ({ tenants, residenceCon
         if (originMetadata[t.originName]?.distances?.[t.residenceId]) {
              distText = originMetadata[t.originName].distances[t.residenceId];
         }
-        
-        links.push({ 
-            source: t.residenceId, 
-            target: t.originName, 
-            value: 1,
-            distanceText: distText // Store text for display
+
+        links.push({
+          source: t.residenceId,
+          target: compositeId, // Links to the specific instance of the school
+          value: 1,
+          distanceText: distText,
+          // Helper for distance calc
+          originNameRaw: t.originName 
         });
       }
     });
+
+    const nodes: NodeData[] = [...residenceNodes, ...Array.from(originNodesMap.values())];
 
     // 2. Setup SVG
     const width = 800;
@@ -143,18 +154,20 @@ const RelationshipMap: React.FC<RelationshipMapProps> = ({ tenants, residenceCon
       .force("link", d3.forceLink(links)
           .id((d: any) => d.id)
           .distance((d: any) => {
-             // DYNAMIC DISTANCE CALCULATION
-             // d.source is Residence, d.target is School (Origin)
-             // We need to check metadata[School][Residence]
-             const schoolName = d.target.id;
-             const resId = d.source.id;
+             // Dynamic Distance Calculation
+             // Use originNameRaw which we stored in the link object to look up metadata
+             // d.source is Residence Node, d.target is Composite Origin Node
+             const schoolName = d.originNameRaw || d.target.label;
+             const resId = d.source.id; // Correct because source is the residence node
+             
              const distStr = originMetadata[schoolName]?.distances?.[resId];
              return parseDistanceToPixels(distStr);
           })
       )
-      .force("charge", d3.forceManyBody().strength(-500))
+      // Increased repulsion slightly to separate the constellations
+      .force("charge", d3.forceManyBody().strength(-800)) 
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide().radius((d: any) => d.group === 1 ? 70 : 40));
+      .force("collide", d3.forceCollide().radius((d: any) => d.group === 1 ? 80 : 45));
 
     // 4. Draw Lines
     const linkGroup = g.append("g");
@@ -170,7 +183,7 @@ const RelationshipMap: React.FC<RelationshipMapProps> = ({ tenants, residenceCon
     // Labels on links (distance)
     const linkLabel = linkGroup
       .selectAll("text")
-      .data(links.filter((d: any) => d.distanceText)) // Only if text exists
+      .data(links.filter((d: any) => d.distanceText))
       .join("text")
       .attr("text-anchor", "middle")
       .attr("dy", -3)
@@ -189,9 +202,9 @@ const RelationshipMap: React.FC<RelationshipMapProps> = ({ tenants, residenceCon
 
     // Add Circles
     node.append("circle")
-      .attr("r", (d: any) => d.group === 1 ? 25 : 12)
+      .attr("r", (d: any) => d.group === 1 ? 30 : 12) // Slightly larger residences
       .attr("fill", (d: any) => d.color || '#000')
-      .attr("stroke", "#fff") // White border ONLY on the circle
+      .attr("stroke", "#fff")
       .attr("stroke-width", 2)
       .call(d3.drag<any, any>()
         .on("start", dragstarted)
@@ -201,12 +214,12 @@ const RelationshipMap: React.FC<RelationshipMapProps> = ({ tenants, residenceCon
     // Add Text Labels
     node.append("text")
       .text((d: any) => d.label)
-      .attr("x", (d: any) => d.group === 1 ? 30 : 16)
+      .attr("x", (d: any) => d.group === 1 ? 35 : 16)
       .attr("y", 5)
-      .style("font-size", (d: any) => d.group === 1 ? "14px" : "12px")
+      .style("font-size", (d: any) => d.group === 1 ? "14px" : "11px")
       .style("font-weight", (d: any) => d.group === 1 ? "700" : "500")
-      .style("fill", "#0f172a") // Slate-900
-      .style("stroke", "white") // Stroke to make text readable over lines
+      .style("fill", "#0f172a") 
+      .style("stroke", "white") 
       .style("stroke-width", 3)
       .style("paint-order", "stroke")
       .style("pointer-events", "none");
@@ -255,7 +268,7 @@ const RelationshipMap: React.FC<RelationshipMapProps> = ({ tenants, residenceCon
   return (
     <div className="w-full h-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
       <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center z-10">
-         <h3 className="font-semibold text-slate-800">Cartographie des Flux (Réseau)</h3>
+         <h3 className="font-semibold text-slate-800">Cartographie des Flux (Constellations par Résidence)</h3>
          <div className="text-xs text-slate-500 hidden sm:block">
             <span className="mr-3">● Grosses bulles : Résidences</span>
             <span>● Petites bulles : Écoles/Entreprises</span>
@@ -268,7 +281,7 @@ const RelationshipMap: React.FC<RelationshipMapProps> = ({ tenants, residenceCon
         {/* Legend for distance */}
         <div className="absolute top-4 right-4 bg-white/90 p-3 rounded-lg border border-slate-200 shadow-sm text-xs text-slate-600 max-w-[200px]">
            <p className="font-bold mb-1">Moteur Physique :</p>
-           <p>Si une distance est renseignée (Paramètres), la longueur du trait s'adapte automatiquement.</p>
+           <p>Les liens représentent les distances réelles si elles sont renseignées dans les Paramètres.</p>
            <div className="mt-2 flex items-center gap-2">
              <div className="w-8 h-px bg-slate-400"></div>
              <span>Court = Proche</span>
