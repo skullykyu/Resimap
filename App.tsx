@@ -6,12 +6,14 @@ import TenantForm from './components/TenantForm';
 import RelationshipMap from './components/RelationshipMap';
 import MarketingAdvisor from './components/MarketingAdvisor';
 import Settings from './components/Settings';
+import AdvancedStats from './components/AdvancedStats'; // Import du nouveau composant
 import { initFirebase, subscribeToData, saveToFirebase, isFirebaseInitialized } from './services/firebase';
-import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock, Lock, Globe, Users2, Pencil } from 'lucide-react';
+import { LayoutDashboard, Network, Users, Plus, BrainCircuit, Building2, Settings as SettingsIcon, Trash2, UserCheck, UserPlus, Cloud, CloudOff, RefreshCw, AlertTriangle, Clock, Lock, Globe, Users2, Pencil, PieChart as PieChartIcon } from 'lucide-react';
 
 enum Tab {
   DASHBOARD = 'tableau_de_bord',
   MAP = 'carte',
+  STATS = 'statistiques_croisees', // Nouvel onglet
   DATA = 'donnees',
   AI = 'conseiller',
   SETTINGS = 'parametres'
@@ -329,6 +331,14 @@ const App: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab(Tab.STATS)}
+            className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.STATS ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}
+          >
+            <PieChartIcon className="w-5 h-5 flex-shrink-0" />
+            <span className="ml-3 font-medium hidden lg:block">Statistiques Croisées</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab(Tab.AI)}
             className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.AI ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}
           >
@@ -368,6 +378,7 @@ const App: React.FC = () => {
               <h1 className="text-2xl font-bold text-slate-900">
                 {activeTab === Tab.DASHBOARD && 'Vue d\'ensemble'}
                 {activeTab === Tab.MAP && 'Cartographie des Relations'}
+                {activeTab === Tab.STATS && 'Analyses & Statistiques Croisées'}
                 {activeTab === Tab.AI && 'Stratégie Marketing (Gemini)'}
                 {activeTab === Tab.DATA && 'Gestion des Données'}
                 {activeTab === Tab.SETTINGS && 'Paramètres Généraux'}
@@ -457,6 +468,12 @@ const App: React.FC = () => {
           {activeTab === Tab.MAP && (
             <div className="h-[600px] animate-in fade-in slide-in-from-bottom-4 duration-500">
               <RelationshipMap tenants={activeTenants} residenceConfig={residenceConfig} />
+            </div>
+          )}
+
+          {activeTab === Tab.STATS && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <AdvancedStats tenants={activeTenants} residenceConfig={residenceConfig} />
             </div>
           )}
 
