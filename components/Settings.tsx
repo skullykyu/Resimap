@@ -1,561 +1,266 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { ResidenceConfig, ResidenceID, OriginOptions, Tenant, FirebaseConfig, OriginMetadata } from '../types';
-import { Settings as SettingsIcon, Trash2, Plus, School, Building, Download, Upload, FileJson, Copy, Check, Cloud, Wifi, WifiOff, RefreshCw, GraduationCap, Pencil, X, MapPin } from 'lucide-react';
+import { Settings as SettingsIcon, Trash2, Plus, School, Building, Download, Upload, FileJson, Copy, Check, Cloud, Wifi, WifiOff, GraduationCap, X, MapPin, PencilLine, Save } from 'lucide-react';
 
 interface SettingsProps {
   config: ResidenceConfig[];
   onUpdateConfig: (newConfig: ResidenceConfig[]) => void;
   originOptions: OriginOptions;
   onUpdateOriginOptions: (newOptions: OriginOptions) => void;
+  onRenameOption: (type: 'schools' | 'internships' | 'studyFields', oldName: string, newName: string) => void;
   onResetAll: () => void;
   tenants: Tenant[];
   onImportData: (data: any) => void;
-  
-  // Cloud Props
   onConnectCloud: (config: FirebaseConfig) => void;
   onDisconnectCloud: () => void;
   onForcePush: () => void;
   isCloudConnected: boolean;
-
-  // Metadata Props
   originMetadata?: OriginMetadata;
   onUpdateMetadata?: (metadata: OriginMetadata) => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
-  config, 
-  onUpdateConfig, 
-  originOptions, 
-  onUpdateOriginOptions, 
-  onResetAll,
-  tenants,
-  onImportData,
-  onForcePush,
-  isCloudConnected,
-  originMetadata = {},
-  onUpdateMetadata
+  config, onUpdateConfig, originOptions, onUpdateOriginOptions, onRenameOption,
+  onResetAll, tenants, onImportData, onForcePush, isCloudConnected,
+  originMetadata = {}, onUpdateMetadata
 }) => {
   // Config Management
   const handleChangeConfig = (id: ResidenceID, field: keyof ResidenceConfig, value: string | number) => {
-    const newConfig = config.map(c => 
-      c.id === id ? { ...c, [field]: value } : c
-    );
+    const newConfig = config.map(c => c.id === id ? { ...c, [field]: value } : c);
     onUpdateConfig(newConfig);
   };
 
-  // Origin List Management Inputs
   const [newSchool, setNewSchool] = useState('');
   const [newCompany, setNewCompany] = useState('');
-  const [newCursus, setNewCursus] = useState(''); // New State
+  const [newCursus, setNewCursus] = useState('');
   const [copied, setCopied] = useState(false);
   
-  // --- METADATA MODAL STATE ---
   const [editingOrigin, setEditingOrigin] = useState<string | null>(null);
   const [tempDistances, setTempDistances] = useState<Record<string, string>>({});
 
-  // File Import Ref
+  // States for inline renaming
+  const [inlineEditing, setInlineEditing] = useState<{type: string, oldName: string, value: string} | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addSchool = () => {
     if (newSchool.trim()) {
-      onUpdateOriginOptions({
-        ...originOptions,
-        schools: [...(originOptions.schools || []), newSchool.trim()].sort()
-      });
+      onUpdateOriginOptions({ ...originOptions, schools: [...(originOptions.schools || []), newSchool.trim()].sort() });
       setNewSchool('');
     }
   };
 
   const addCompany = () => {
     if (newCompany.trim()) {
-      onUpdateOriginOptions({
-        ...originOptions,
-        internships: [...(originOptions.internships || []), newCompany.trim()].sort()
-      });
+      onUpdateOriginOptions({ ...originOptions, internships: [...(originOptions.internships || []), newCompany.trim()].sort() });
       setNewCompany('');
     }
   };
 
   const addCursus = () => {
     if (newCursus.trim()) {
-      onUpdateOriginOptions({
-        ...originOptions,
-        studyFields: [...(originOptions.studyFields || []), newCursus.trim()].sort()
-      });
+      onUpdateOriginOptions({ ...originOptions, studyFields: [...(originOptions.studyFields || []), newCursus.trim()].sort() });
       setNewCursus('');
     }
   };
 
   const removeOption = (type: 'schools' | 'internships' | 'studyFields', valueToRemove: string) => {
     const currentList = originOptions[type] || [];
-    onUpdateOriginOptions({
-      ...originOptions,
-      [type]: currentList.filter(item => item !== valueToRemove)
-    });
+    if (window.confirm(`Supprimer "${valueToRemove}" ? (Les locataires existants garderont leur donnée, mais l'option disparaîtra du formulaire)`)) {
+      onUpdateOriginOptions({ ...originOptions, [type]: currentList.filter(item => item !== valueToRemove) });
+    }
   };
 
-  // --- Export / Import Logic ---
-  
-  const getExportData = () => {
-    return {
-      tenants,
-      config,
-      origins: originOptions,
-      metadata: originMetadata,
-      exportDate: new Date().toISOString()
-    };
+  const startInlineEdit = (type: 'schools' | 'internships' | 'studyFields', name: string) => {
+    setInlineEditing({ type, oldName: name, value: name });
   };
-  
+
+  const cancelInlineEdit = () => {
+    setInlineEditing(null);
+  };
+
+  const submitInlineEdit = () => {
+    if (inlineEditing && inlineEditing.value.trim() && inlineEditing.value.trim() !== inlineEditing.oldName) {
+      onRenameOption(inlineEditing.type as any, inlineEditing.oldName, inlineEditing.value.trim());
+    }
+    setInlineEditing(null);
+  };
+
   const handleExport = () => {
-    const jsonString = JSON.stringify(getExportData(), null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
+    const data = { tenants, config, origins: originOptions, metadata: originMetadata, exportDate: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    
     const link = document.createElement('a');
     link.href = url;
     link.download = `resimap_backup_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
   };
 
   const handleCopyToClipboard = () => {
-    const jsonString = JSON.stringify(getExportData(), null, 2);
-    navigator.clipboard.writeText(jsonString).then(() => {
+    const data = { tenants, config, origins: originOptions, metadata: originMetadata };
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   };
 
-  const handleImportClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const json = JSON.parse(event.target?.result as string);
-        if (window.confirm("Vous allez importer des données qui écraseront les données actuelles si des conflits existent. Voulez-vous continuer ?")) {
-          onImportData(json);
-        }
-      } catch (err) {
-        alert("Fichier invalide");
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  // --- Modal Logic ---
-  
   const openEditModal = (originName: string) => {
-    const existing = originMetadata[originName]?.distances || {};
-    setTempDistances({ ...existing }); // Clone existing data or empty
+    setTempDistances({ ...(originMetadata[originName]?.distances || {}) });
     setEditingOrigin(originName);
-  };
-
-  const closeEditModal = () => {
-    setEditingOrigin(null);
-    setTempDistances({});
   };
 
   const saveMetadata = () => {
     if (editingOrigin && onUpdateMetadata) {
-      onUpdateMetadata({
-        ...originMetadata,
-        [editingOrigin]: {
-          distances: tempDistances,
-          notes: originMetadata[editingOrigin]?.notes || ''
-        }
-      });
+      onUpdateMetadata({ ...originMetadata, [editingOrigin]: { distances: tempDistances, notes: originMetadata[editingOrigin]?.notes || '' } });
     }
-    closeEditModal();
+    setEditingOrigin(null);
   };
 
-  const handleDistanceChange = (resId: string, value: string) => {
-    setTempDistances(prev => ({
-      ...prev,
-      [resId]: value
-    }));
-  };
+  const renderOptionList = (type: 'schools' | 'internships' | 'studyFields', list: string[], Icon: any, placeholder: string, addFn: () => void, val: string, setVal: (v: string) => void) => (
+    <div className="p-6">
+      <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><Icon className="w-4 h-4 text-indigo-500" /> {placeholder}s</h3>
+      <div className="flex gap-2 mb-4">
+        <input type="text" value={val} onChange={(e) => setVal(e.target.value)} placeholder={`Ajouter ${placeholder.toLowerCase()}...`} className="flex-1 px-3 py-2 border rounded-lg text-sm" />
+        <button onClick={addFn} className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 transition-colors"><Plus className="w-5 h-5" /></button>
+      </div>
+      <ul className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+        {list.map((name, idx) => {
+          const isEditingThis = inlineEditing?.type === type && inlineEditing?.oldName === name;
+          return (
+            <li key={idx} className={`flex justify-between items-center text-sm p-2 rounded-md group transition-all ${isEditingThis ? 'bg-indigo-50 border border-indigo-200 shadow-sm' : 'bg-slate-50 border border-transparent'}`}>
+              {isEditingThis ? (
+                <div className="flex items-center gap-2 w-full">
+                  <input 
+                    autoFocus
+                    type="text" 
+                    className="flex-1 bg-white border border-indigo-300 px-2 py-1 rounded text-sm outline-none ring-2 ring-indigo-100" 
+                    value={inlineEditing.value}
+                    onChange={(e) => setInlineEditing({...inlineEditing, value: e.target.value})}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') submitInlineEdit();
+                      if (e.key === 'Escape') cancelInlineEdit();
+                    }}
+                  />
+                  <button onClick={submitInlineEdit} className="p-1 text-emerald-600 hover:bg-emerald-100 rounded transition-colors"><Check className="w-4 h-4" /></button>
+                  <button onClick={cancelInlineEdit} className="p-1 text-slate-400 hover:bg-slate-200 rounded transition-colors"><X className="w-4 h-4" /></button>
+                </div>
+              ) : (
+                <>
+                  <span className="truncate pr-2 font-medium text-slate-700">{name}</span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => startInlineEdit(type, name)} className="text-slate-400 hover:text-indigo-600 p-1 hover:bg-indigo-50 rounded" title="Modifier l'orthographe"><PencilLine className="w-4 h-4" /></button>
+                    {(type === 'schools' || type === 'internships') && (
+                      <button onClick={() => openEditModal(name)} className="text-slate-400 hover:text-indigo-600 p-1 hover:bg-indigo-50 rounded" title="Gérer les distances"><MapPin className="w-4 h-4" /></button>
+                    )}
+                    <button onClick={() => removeOption(type, name)} className="text-slate-400 hover:text-red-500 p-1 hover:bg-red-50 rounded" title="Supprimer de la liste"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 mb-8 relative">
-      
-      {/* EDIT MODAL OVERLAY */}
+      {/* Modal for Distances */}
       {editingOrigin && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-             <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                   <MapPin className="w-5 h-5 text-indigo-600" />
-                   Détails : {editingOrigin}
-                </h3>
-                <button onClick={closeEditModal} className="text-slate-400 hover:text-slate-600">
-                  <X className="w-5 h-5" />
-                </button>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+             <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2"><MapPin className="w-5 h-5 text-indigo-600" /> Distances : {editingOrigin}</h3>
+                <button onClick={() => setEditingOrigin(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
              </div>
-             
-             <div className="p-6 max-h-[60vh] overflow-y-auto">
-                <p className="text-sm text-slate-500 mb-4">
-                  Renseignez les distances ou temps de trajet vers vos différentes résidences. (Ex: "10 min à pied", "5 km", etc.)
-                </p>
-                <div className="space-y-4">
-                  {config.map(res => (
-                    <div key={res.id} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: res.color }}>
-                         {res.name.substring(0, 1)}
-                      </div>
-                      <div className="flex-grow">
-                         <label className="text-xs font-semibold text-slate-500 uppercase">{res.name}</label>
-                         <input 
-                            type="text"
-                            placeholder="Ex: 15 min (Tram)"
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none mt-1"
-                            value={tempDistances[res.id] || ''}
-                            onChange={(e) => handleDistanceChange(res.id, e.target.value)}
-                         />
-                      </div>
+             <div className="p-6 space-y-4">
+                <p className="text-sm text-slate-500 mb-2">Temps de trajet vers les résidences :</p>
+                {config.map(res => (
+                  <div key={res.id} className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: res.color }}>{res.name.charAt(0)}</div>
+                    <div className="flex-grow">
+                       <label className="text-xs font-semibold text-slate-500 uppercase">{res.name}</label>
+                       <input type="text" placeholder="Ex: 15 min" className="w-full px-3 py-2 border rounded-lg text-sm" value={tempDistances[res.id] || ''} onChange={(e) => setTempDistances({...tempDistances, [res.id]: e.target.value})} />
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
              </div>
-
-             <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
-                <button 
-                  onClick={closeEditModal}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
-                >
-                  Annuler
-                </button>
-                <button 
-                  onClick={saveMetadata}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm"
-                >
-                  Enregistrer
-                </button>
+             <div className="bg-slate-50 px-6 py-4 border-t flex justify-end gap-3">
+                <button onClick={() => setEditingOrigin(null)} className="px-4 py-2 text-sm text-slate-600">Annuler</button>
+                <button onClick={saveMetadata} className="px-4 py-2 text-sm text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 transition-colors flex items-center gap-2"><Save className="w-4 h-4" /> Enregistrer</button>
              </div>
           </div>
         </div>
       )}
 
-      {/* 1. Residence Configuration */}
+      {/* Residence Config */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
-          <div className="p-2 bg-slate-200 rounded-lg">
-            <SettingsIcon className="w-6 h-6 text-slate-700" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-800">Configuration des Résidences</h2>
-            <p className="text-slate-500 text-sm">Personnalisez les noms, capacités et couleurs de vos 4 résidences.</p>
-          </div>
+          <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><SettingsIcon className="w-6 h-6" /></div>
+          <div><h2 className="text-xl font-bold text-slate-800">Configuration des Résidences</h2></div>
         </div>
-
-        <div className="p-6">
-          <div className="grid grid-cols-1 gap-6">
+        <div className="p-6 space-y-4">
             {config.map((res) => (
-              <div key={res.id} className="flex flex-col lg:flex-row gap-4 items-start lg:items-end p-4 border border-slate-100 rounded-lg hover:bg-slate-50 transition-colors">
-                
-                {/* Name Input */}
-                <div className="flex-grow space-y-1 w-full lg:w-auto">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Nom de la résidence ({res.id.replace('RES_', '')})
-                  </label>
-                  <input
-                    type="text"
-                    value={res.name}
-                    onChange={(e) => handleChangeConfig(res.id, 'name', e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-medium text-slate-800"
-                  />
-                </div>
-
-                {/* Capacity Input (NEW) */}
-                <div className="space-y-1 w-full lg:w-32">
-                   <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Capacité (Logts)</label>
-                   <input
-                    type="number"
-                    min="1"
-                    value={res.capacity || 0}
-                    onChange={(e) => handleChangeConfig(res.id, 'capacity', parseInt(e.target.value) || 0)}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-medium text-slate-800 text-right"
-                  />
-                </div>
-                
-                {/* Color Input */}
-                <div className="space-y-1">
-                   <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Couleur</label>
-                   <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={res.color}
-                        onChange={(e) => handleChangeConfig(res.id, 'color', e.target.value)}
-                        className="h-10 w-20 rounded cursor-pointer border border-slate-300"
-                      />
-                   </div>
-                </div>
+              <div key={res.id} className="flex flex-col lg:flex-row gap-4 items-end p-4 border rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                <div className="flex-grow space-y-1 w-full"><label className="text-xs font-semibold text-slate-500">Nom</label><input type="text" value={res.name} onChange={(e) => handleChangeConfig(res.id, 'name', e.target.value)} className="w-full px-4 py-2 border rounded-lg font-medium outline-none focus:ring-2 focus:ring-indigo-100" /></div>
+                <div className="w-full lg:w-32"><label className="text-xs font-semibold text-slate-500">Capacité</label><input type="number" value={res.capacity || 0} onChange={(e) => handleChangeConfig(res.id, 'capacity', parseInt(e.target.value) || 0)} className="w-full px-4 py-2 border rounded-lg text-right" /></div>
+                <div><label className="text-xs font-semibold text-slate-500">Couleur</label><input type="color" value={res.color} onChange={(e) => handleChangeConfig(res.id, 'color', e.target.value)} className="h-10 w-20 rounded border bg-white p-1 cursor-pointer" /></div>
               </div>
             ))}
-          </div>
         </div>
       </div>
 
-      {/* 2. Database Management */}
+      {/* Lists Management */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
-          <div className="p-2 bg-slate-200 rounded-lg">
-            <School className="w-6 h-6 text-slate-700" />
-          </div>
+          <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><School className="w-6 h-6" /></div>
           <div>
-            <h2 className="text-xl font-bold text-slate-800">Base de Données Écoles, Entreprises & Cursus</h2>
-            <p className="text-slate-500 text-sm">Gérez les listes déroulantes proposées lors de la saisie.</p>
+            <h2 className="text-xl font-bold text-slate-800">Gestion des Listes & Correction</h2>
+            <p className="text-sm text-slate-500">Modifiez l'écriture pour corriger les erreurs sur tous les locataires.</p>
           </div>
         </div>
-
         <div className="grid grid-cols-1 xl:grid-cols-3 divide-y xl:divide-y-0 xl:divide-x divide-slate-100">
-          
-          {/* Schools List */}
-          <div className="p-6">
-            <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <School className="w-4 h-4 text-indigo-500" />
-              Liste des Écoles
-            </h3>
-            
-            <div className="flex gap-2 mb-4">
-              <input 
-                type="text" 
-                value={newSchool}
-                onChange={(e) => setNewSchool(e.target.value)}
-                placeholder="Nouvelle école..."
-                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                onKeyDown={(e) => e.key === 'Enter' && addSchool()}
-              />
-              <button 
-                onClick={addSchool}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
-            </div>
-
-            <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-              {(originOptions.schools || []).map((school, idx) => (
-                <li key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-md group hover:bg-slate-100 transition-colors">
-                  <span className="text-slate-700">{school}</span>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => openEditModal(school)}
-                      className="text-slate-400 hover:text-indigo-600 p-1"
-                      title="Modifier les détails (distances)"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => removeOption('schools', school)}
-                      className="text-slate-400 hover:text-red-500 p-1"
-                      title="Supprimer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Cursus List (NEW) */}
-          <div className="p-6">
-            <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <GraduationCap className="w-4 h-4 text-indigo-500" />
-              Liste des Cursus
-            </h3>
-
-            <div className="flex gap-2 mb-4">
-              <input 
-                type="text" 
-                value={newCursus}
-                onChange={(e) => setNewCursus(e.target.value)}
-                placeholder="Nouveau cursus..."
-                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                onKeyDown={(e) => e.key === 'Enter' && addCursus()}
-              />
-              <button 
-                onClick={addCursus}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
-            </div>
-
-            <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-              {(originOptions.studyFields || []).map((cursus, idx) => (
-                <li key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-md group hover:bg-slate-100 transition-colors">
-                  <span className="text-slate-700">{cursus}</span>
-                  <button 
-                    onClick={() => removeOption('studyFields', cursus)}
-                    className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Companies List */}
-          <div className="p-6">
-            <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <Building className="w-4 h-4 text-indigo-500" />
-              Liste des Entreprises
-            </h3>
-
-            <div className="flex gap-2 mb-4">
-              <input 
-                type="text" 
-                value={newCompany}
-                onChange={(e) => setNewCompany(e.target.value)}
-                placeholder="Nouvelle entreprise..."
-                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                onKeyDown={(e) => e.key === 'Enter' && addCompany()}
-              />
-              <button 
-                onClick={addCompany}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
-            </div>
-
-            <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-              {(originOptions.internships || []).map((company, idx) => (
-                <li key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-md group hover:bg-slate-100 transition-colors">
-                  <span className="text-slate-700">{company}</span>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => openEditModal(company)}
-                      className="text-slate-400 hover:text-indigo-600 p-1"
-                      title="Modifier les détails (distances)"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => removeOption('internships', company)}
-                      className="text-slate-400 hover:text-red-500 p-1"
-                      title="Supprimer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-
+          {renderOptionList('schools', originOptions.schools || [], School, 'École', addSchool, newSchool, setNewSchool)}
+          {renderOptionList('studyFields', originOptions.studyFields || [], GraduationCap, 'Cursus', addCursus, newCursus, setNewCursus)}
+          {renderOptionList('internships', originOptions.internships || [], Building, 'Entreprise', addCompany, newCompany, setNewCompany)}
         </div>
       </div>
 
-      {/* CLOUD SYNC SECTION */}
-      <div className={`rounded-xl shadow-sm border overflow-hidden ${isCloudConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
-        <div className={`p-6 border-b flex items-center gap-3 ${isCloudConnected ? 'border-emerald-100 bg-emerald-100/50' : 'border-slate-100 bg-slate-100'}`}>
-          <div className={`p-2 rounded-lg ${isCloudConnected ? 'bg-emerald-200 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
-            <Cloud className="w-6 h-6" />
-          </div>
-          <div className="flex-grow">
-            <h2 className={`text-xl font-bold ${isCloudConnected ? 'text-emerald-900' : 'text-slate-800'}`}>
-              Site Partagé (Synchronisation Automatique)
-            </h2>
-            <p className={`${isCloudConnected ? 'text-emerald-700' : 'text-slate-500'} text-sm`}>
-               Toutes les modifications sont enregistrées sur le projet <strong>resimap63000</strong> et visibles par tous.
-            </p>
-          </div>
-          <div>
-            {isCloudConnected ? (
-              <span className="flex items-center gap-2 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold uppercase tracking-wide border border-emerald-200">
-                <Wifi className="w-4 h-4" /> En Ligne
-              </span>
-            ) : (
-               <span className="flex items-center gap-2 px-3 py-1 bg-slate-200 text-slate-600 rounded-full text-xs font-bold uppercase tracking-wide border border-slate-300">
-                <WifiOff className="w-4 h-4" /> Hors Ligne
-              </span>
-            )}
-          </div>
+      {/* Synchronization Status */}
+      <div className={`rounded-xl shadow-sm border p-6 flex items-center gap-4 ${isCloudConnected ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+        <Cloud className={`w-8 h-8 ${isCloudConnected ? 'text-emerald-600' : 'text-slate-400'}`} />
+        <div className="flex-grow">
+          <h2 className="font-bold text-lg">Statut Cloud : {isCloudConnected ? 'Connecté' : 'Déconnecté'}</h2>
+          <p className="text-sm opacity-80">{isCloudConnected ? 'Les données sont synchronisées en temps réel via Firebase.' : 'Mode local uniquement. Connectez-vous via App.tsx pour activer le cloud.'}</p>
         </div>
-
-        <div className="p-6">
-            {isCloudConnected && (
-              <div className="flex gap-4 items-center flex-wrap">
-                 <button 
-                  onClick={onForcePush}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-lg font-bold transition-all shadow-sm flex items-center gap-2"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                  Forcer la sauvegarde (Manuel)
-                </button>
-                <p className="text-xs text-slate-500 italic max-w-sm">
-                  Normalement inutile, la sauvegarde est automatique à chaque modification.
-                </p>
-              </div>
-            )}
-        </div>
+        {isCloudConnected ? <Wifi className="w-6 h-6 text-emerald-600" /> : <WifiOff className="w-6 h-6 text-slate-400" />}
       </div>
 
-      {/* 0. Data Sharing / Backup (Local) */}
+      {/* Backup */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
-          <div className="p-2 bg-slate-200 rounded-lg">
-            <FileJson className="w-6 h-6 text-slate-700" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-800">Export / Import (Fichiers)</h2>
-            <p className="text-slate-500 text-sm">Utile pour faire des copies de sécurité sur votre ordinateur.</p>
-          </div>
+        <div className="p-6 border-b bg-slate-50 flex items-center gap-3">
+          <FileJson className="w-6 h-6 text-slate-600" />
+          <h2 className="text-xl font-bold">Sauvegarde & Export</h2>
         </div>
-        
-        <div className="p-6">
-          <div className="flex flex-col sm:flex-row gap-4 mb-4">
-            <button 
-              onClick={handleCopyToClipboard}
-              className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-sm border ${
-                copied 
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
-              }`}
-            >
-              {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-              {copied ? 'Copié !' : 'Copier les données'}
-            </button>
-            
-            <button 
-              onClick={handleExport}
-              className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              <Download className="w-5 h-5" />
-              Télécharger (.json)
-            </button>
-            
-            <button 
-              onClick={handleImportClick}
-              className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              <Upload className="w-5 h-5" />
-              Importer
-            </button>
-            <input 
-              type="file" 
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".json"
-              className="hidden" 
-            />
-          </div>
+        <div className="p-6 flex flex-wrap gap-4">
+            <button onClick={handleCopyToClipboard} className="flex-1 px-4 py-3 border rounded-lg font-medium bg-white hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">{copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />} {copied ? 'Copié' : 'Copier JSON'}</button>
+            <button onClick={handleExport} className="flex-1 px-4 py-3 border rounded-lg font-medium bg-white hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"><Download className="w-4 h-4" /> Export (.json)</button>
+            <button onClick={() => fileInputRef.current?.click()} className="flex-1 px-4 py-3 border rounded-lg font-medium bg-white hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"><Upload className="w-4 h-4" /> Import</button>
+            <input type="file" ref={fileInputRef} onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                try {
+                  const json = JSON.parse(ev.target?.result as string);
+                  if (window.confirm("Écraser les données ?")) onImportData(json);
+                } catch (err) { alert("Fichier JSON invalide."); }
+              };
+              reader.readAsText(file);
+              e.target.value = '';
+            }} accept=".json" className="hidden" />
         </div>
       </div>
-
     </div>
   );
 };

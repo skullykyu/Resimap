@@ -29,7 +29,6 @@ const App: React.FC = () => {
   // --- State Initialization ---
 
   const [tenants, setTenants] = useState<Tenant[]>(() => {
-    // Try local storage for instant load, will be overwritten by cloud sync immediately
     const saved = localStorage.getItem('resimap_tenants');
     return saved ? JSON.parse(saved) : MOCK_TENANTS;
   });
@@ -44,39 +43,28 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : DEFAULT_ORIGIN_OPTIONS;
   });
 
-  // New State for Metadata (Distances)
   const [originMetadata, setOriginMetadata] = useState<OriginMetadata>(() => {
     const saved = localStorage.getItem('resimap_metadata');
     return saved ? JSON.parse(saved) : {};
   });
   
-  // State for Data View sub-tab
   const [dataViewMode, setDataViewMode] = useState<PersonStatus>(PersonStatus.TENANT);
-  // Search State
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // EDIT MODE STATE
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
 
-  // --- Cloud Logic (Auto-Connect) ---
-
   useEffect(() => {
-    // Force connection using the embedded config for Shared Mode
     const configToUse = EMBEDDED_FIREBASE_CONFIG;
-
     if (configToUse && initFirebase(configToUse)) {
         setCloudConnected(true);
-        console.log("Mode Partagé : Connecté à", configToUse.projectId);
     }
   }, []);
 
-  // Listen for Cloud Updates
   useEffect(() => {
     if (!cloudConnected) return;
 
     const handleDataUpdate = (data: any, type: 'tenants' | 'config' | 'origins' | 'metadata') => {
       setLastSyncTime(new Date());
-      setSyncError(null); // Clear error if we successfully receive data
+      setSyncError(null);
       
       if (!data && type !== 'origins' && type !== 'metadata') return; 
       
@@ -95,14 +83,7 @@ const App: React.FC = () => {
     };
 
     const handleError = (error: any) => {
-      console.error("Sync Error:", error);
-      let msg = "Erreur de synchronisation inconnue.";
-      if (error.code === 'PERMISSION_DENIED') {
-        msg = "Accès refusé. Avez-vous mis les règles de la base de données sur 'true' ?";
-      } else if (error.code === 'NETWORK_ERROR') {
-        msg = "Erreur réseau : Vérifiez votre connexion internet.";
-      }
-      setSyncError(msg);
+      setSyncError("Erreur de synchronisation.");
     };
 
     const unsubTenants = subscribeToData('tenants', (data) => handleDataUpdate(data, 'tenants'), handleError);
@@ -117,8 +98,6 @@ const App: React.FC = () => {
       unsubMetadata();
     };
   }, [cloudConnected]);
-
-  // --- Persistence Logic (Hybrid) ---
 
   useEffect(() => {
     localStorage.setItem('resimap_tenants', JSON.stringify(tenants));
@@ -136,11 +115,7 @@ const App: React.FC = () => {
     localStorage.setItem('resimap_metadata', JSON.stringify(originMetadata));
   }, [originMetadata]);
 
-  // --- Handlers (With Cloud Sync) ---
-
-  // Needed for Settings component interface, even if we auto-connect
   const handleCloudConnect = (config: FirebaseConfig) => {
-     // No-op in shared mode usually, but allow override if needed
      if (initFirebase(config)) {
        setCloudConnected(true);
        window.location.reload();
@@ -149,21 +124,18 @@ const App: React.FC = () => {
 
   const safeSave = async (path: string, data: any) => {
     if (!cloudConnected) return;
-    
     try {
       await saveToFirebase(path, data);
       setSyncError(null);
       setLastSyncTime(new Date());
     } catch (e: any) {
-      console.error("Save failed", e);
-      setSyncError("Échec de l'enregistrement : " + (e.message || "Erreur inconnue"));
+      setSyncError("Échec de l'enregistrement.");
     }
   };
 
   const handleForcePushToCloud = async () => {
     if (!cloudConnected) return;
-    
-    if (window.confirm("⚠️ ATTENTION : Vous allez écraser les données partagées avec votre version locale. Continuer ?")) {
+    if (window.confirm("Écraser les données partagées ?")) {
       setIsPushing(true);
       try {
         await Promise.all([
@@ -172,12 +144,10 @@ const App: React.FC = () => {
           saveToFirebase('origins', originOptions),
           saveToFirebase('metadata', originMetadata)
         ]);
-        alert("✅ Succès ! Données mises à jour pour tout le monde.");
         setLastSyncTime(new Date());
         setSyncError(null);
       } catch (e: any) {
-        alert("❌ Erreur : " + e.message);
-        setSyncError("Erreur d'envoi : " + e.message);
+        setSyncError("Erreur d'envoi.");
       } finally {
         setIsPushing(false);
       }
@@ -188,28 +158,21 @@ const App: React.FC = () => {
     window.location.reload(); 
   };
 
-  // --- AUTO-SAVE NEW OPTIONS LOGIC ---
   const checkAndSaveNewOptions = (tenant: Tenant) => {
     let updatedOptions = { ...originOptions };
     let hasChanges = false;
-    
-    // 1. Cursus
     const cleanCursus = tenant.cursus ? tenant.cursus.trim() : '';
     if (cleanCursus && !updatedOptions.studyFields.includes(cleanCursus)) {
       updatedOptions.studyFields = [...updatedOptions.studyFields, cleanCursus].sort();
       hasChanges = true;
     }
-
-    // 2. Écoles
     const listKey = tenant.originType === EntityType.SCHOOL ? 'schools' : 'internships';
     const cleanOrigin = tenant.originName ? tenant.originName.trim() : '';
     const currentList = updatedOptions[listKey] || [];
-    
     if (cleanOrigin && !currentList.includes(cleanOrigin)) {
       updatedOptions[listKey] = [...currentList, cleanOrigin].sort();
       hasChanges = true;
     }
-
     if (hasChanges) {
       setOriginOptions(updatedOptions);
       safeSave('origins', updatedOptions);
@@ -228,7 +191,7 @@ const App: React.FC = () => {
     const updatedList = tenants.map(t => t.id === updatedTenant.id ? updatedTenant : t);
     setTenants(updatedList);
     safeSave('tenants', updatedList);
-    setEditingTenant(null); // Exit edit mode
+    setEditingTenant(null);
   };
 
   const handleEditClick = (tenant: Tenant) => {
@@ -239,15 +202,48 @@ const App: React.FC = () => {
   };
 
   const deleteTenant = (id: string) => {
-    if (window.confirm("Supprimer cette fiche définitivement pour tout le monde ?")) {
+    if (window.confirm("Supprimer cette fiche définitivement ?")) {
       const updated = tenants.filter(t => t.id !== id);
       setTenants(updated);
       safeSave('tenants', updated);
-      
-      if (editingTenant?.id === id) {
-        setEditingTenant(null);
-      }
+      if (editingTenant?.id === id) setEditingTenant(null);
     }
+  };
+
+  const handleRenameOption = (type: 'schools' | 'internships' | 'studyFields', oldName: string, newName: string) => {
+    if (!newName || !newName.trim() || oldName === newName) return;
+    const cleanNewName = newName.trim();
+
+    // 1. Update Options
+    const updatedOptions = { ...originOptions };
+    updatedOptions[type] = updatedOptions[type].map(n => n === oldName ? cleanNewName : n).sort();
+    
+    // 2. Cascade update to Tenants
+    const updatedTenants = tenants.map(t => {
+      if (type === 'studyFields' && t.cursus === oldName) {
+        return { ...t, cursus: cleanNewName };
+      }
+      if ((type === 'schools' || type === 'internships') && t.originName === oldName) {
+        return { ...t, originName: cleanNewName };
+      }
+      return t;
+    });
+
+    // 3. Migrate Metadata
+    let updatedMetadata = { ...originMetadata };
+    if (originMetadata[oldName]) {
+      updatedMetadata[cleanNewName] = { ...originMetadata[oldName] };
+      delete updatedMetadata[oldName];
+    }
+
+    // Apply & Save all
+    setOriginOptions(updatedOptions);
+    setTenants(updatedTenants);
+    setOriginMetadata(updatedMetadata);
+    
+    safeSave('origins', updatedOptions);
+    safeSave('tenants', updatedTenants);
+    safeSave('metadata', updatedMetadata);
   };
 
   const updateConfig = (newConfig: ResidenceConfig[]) => {
@@ -266,12 +262,11 @@ const App: React.FC = () => {
   };
 
   const handleResetAll = () => {
-    if (window.confirm("⚠️ ATTENTION : Cela va effacer TOUTES les données partagées. Êtes-vous certain ?")) {
+    if (window.confirm("Effacer TOUTES les données ?")) {
       setTenants(MOCK_TENANTS);
       setResidenceConfig(DEFAULT_RESIDENCE_CONFIG);
       setOriginOptions(DEFAULT_ORIGIN_OPTIONS);
       setOriginMetadata({});
-      
       if (cloudConnected) {
         safeSave('tenants', MOCK_TENANTS);
         safeSave('config', DEFAULT_RESIDENCE_CONFIG);
@@ -283,33 +278,17 @@ const App: React.FC = () => {
 
   const handleImportData = (data: any) => {
     try {
-      if (data.tenants) {
-        setTenants(data.tenants);
-        safeSave('tenants', data.tenants);
-      }
-      if (data.config) {
-        setResidenceConfig(data.config);
-        safeSave('config', data.config);
-      }
-      if (data.origins) {
-        setOriginOptions(data.origins);
-        safeSave('origins', data.origins);
-      }
-      if (data.metadata) {
-        setOriginMetadata(data.metadata);
-        safeSave('metadata', data.metadata);
-      }
-      alert("Données importées avec succès !");
-    } catch (e) {
-      console.error(e);
-      alert("Erreur lors de l'importation.");
-    }
+      if (data.tenants) { setTenants(data.tenants); safeSave('tenants', data.tenants); }
+      if (data.config) { setResidenceConfig(data.config); safeSave('config', data.config); }
+      if (data.origins) { setOriginOptions(data.origins); safeSave('origins', data.origins); }
+      if (data.metadata) { setOriginMetadata(data.metadata); safeSave('metadata', data.metadata); }
+      alert("Import réussi !");
+    } catch (e) { alert("Erreur import."); }
   };
 
   const getResColor = (id: string) => residenceConfig.find(r => r.id === id)?.color || '#ccc';
   const getResName = (id: string) => residenceConfig.find(r => r.id === id)?.name || id;
 
-  // Filtered lists
   const activeTenants = tenants.filter(t => t.status === PersonStatus.TENANT);
   const prospects = tenants.filter(t => t.status === PersonStatus.PROSPECT);
   
@@ -320,341 +299,99 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex bg-slate-50 text-slate-900 font-sans">
-      
-      {/* Sidebar Navigation */}
       <aside className="w-20 lg:w-64 bg-slate-900 text-slate-300 flex flex-col fixed h-full z-10 transition-all duration-300">
         <div className="h-16 flex items-center justify-center lg:justify-start lg:px-6 border-b border-slate-800">
           <Building2 className="w-8 h-8 text-indigo-500 flex-shrink-0" />
           <span className="ml-3 font-bold text-white text-lg hidden lg:block tracking-tight">ResiMap</span>
         </div>
-        
         <nav className="flex-1 py-6 px-3 space-y-2">
-          
-          <button
-            onClick={() => setActiveTab(Tab.DASHBOARD)}
-            className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.DASHBOARD ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}
-          >
-            <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
-            <span className="ml-3 font-medium hidden lg:block">Tableau de Bord</span>
+          <button onClick={() => setActiveTab(Tab.DASHBOARD)} className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.DASHBOARD ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}>
+            <LayoutDashboard className="w-5 h-5 flex-shrink-0" /><span className="ml-3 font-medium hidden lg:block">Tableau de Bord</span>
           </button>
-
-          <button
-            onClick={() => setActiveTab(Tab.MAP)}
-            className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.MAP ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}
-          >
-            <Network className="w-5 h-5 flex-shrink-0" />
-            <span className="ml-3 font-medium hidden lg:block">Carte des Flux</span>
+          <button onClick={() => setActiveTab(Tab.MAP)} className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.MAP ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}>
+            <Network className="w-5 h-5 flex-shrink-0" /><span className="ml-3 font-medium hidden lg:block">Carte des Flux</span>
           </button>
-
-          <button
-            onClick={() => setActiveTab(Tab.STATS)}
-            className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.STATS ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}
-          >
-            <PieChartIcon className="w-5 h-5 flex-shrink-0" />
-            <span className="ml-3 font-medium hidden lg:block">Statistiques Croisées</span>
+          <button onClick={() => setActiveTab(Tab.STATS)} className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.STATS ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}>
+            <PieChartIcon className="w-5 h-5 flex-shrink-0" /><span className="ml-3 font-medium hidden lg:block">Statistiques Croisées</span>
           </button>
-
-          <button
-            onClick={() => setActiveTab(Tab.AI)}
-            className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.AI ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}
-          >
-            <BrainCircuit className="w-5 h-5 flex-shrink-0" />
-            <span className="ml-3 font-medium hidden lg:block">Conseiller IA</span>
+          <button onClick={() => setActiveTab(Tab.AI)} className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.AI ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}>
+            <BrainCircuit className="w-5 h-5 flex-shrink-0" /><span className="ml-3 font-medium hidden lg:block">Conseiller IA</span>
           </button>
-
           <div className="pt-4 border-t border-slate-800 mt-4">
-             <button
-              onClick={() => setActiveTab(Tab.DATA)}
-              className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.DATA ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}
-            >
-              <Users className="w-5 h-5 flex-shrink-0" />
-              <span className="ml-3 font-medium hidden lg:block">Données & Saisie</span>
+             <button onClick={() => setActiveTab(Tab.DATA)} className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.DATA ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}>
+              <Users className="w-5 h-5 flex-shrink-0" /><span className="ml-3 font-medium hidden lg:block">Données & Saisie</span>
             </button>
-            <button
-              onClick={() => setActiveTab(Tab.SETTINGS)}
-              className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.SETTINGS ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}
-            >
-              <SettingsIcon className="w-5 h-5 flex-shrink-0" />
-              <span className="ml-3 font-medium hidden lg:block">Paramètres</span>
+            <button onClick={() => setActiveTab(Tab.SETTINGS)} className={`w-full flex items-center p-3 rounded-lg transition-colors ${activeTab === Tab.SETTINGS ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}>
+              <SettingsIcon className="w-5 h-5 flex-shrink-0" /><span className="ml-3 font-medium hidden lg:block">Paramètres</span>
             </button>
           </div>
-
         </nav>
-        
-        <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center lg:text-left hidden lg:block">
-          &copy; 2024 ResiMap Corp.
-        </div>
       </aside>
 
-      {/* Main Content Area */}
       <main className="flex-1 ml-20 lg:ml-64 p-4 lg:p-8 overflow-y-auto">
         <header className="flex flex-col gap-4 mb-8">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-2xl font-bold text-slate-900">
                 {activeTab === Tab.DASHBOARD && 'Vue d\'ensemble'}
                 {activeTab === Tab.MAP && 'Cartographie des Relations'}
                 {activeTab === Tab.STATS && 'Analyses & Statistiques Croisées'}
                 {activeTab === Tab.AI && 'Stratégie Marketing (Gemini)'}
                 {activeTab === Tab.DATA && 'Gestion des Données'}
                 {activeTab === Tab.SETTINGS && 'Paramètres Généraux'}
-              </h1>
-              <p className="text-slate-500 mt-1 flex items-center gap-2">
-                <span>Gérez vos 4 résidences et analysez vos cibles.</span>
-              </p>
-            </div>
-            
-            <div className="hidden md:flex flex-col items-end gap-2">
-              {/* Status Bar */}
-              <div className="flex items-center gap-2">
-                {cloudConnected ? (
-                   <div className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border shadow-sm ${syncError ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                        {syncError ? <AlertTriangle className="w-3.5 h-3.5" /> : <Users2 className="w-3.5 h-3.5" />}
-                        {syncError ? "Erreur Synchro" : "Site Partagé (En Ligne)"}
-                    </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
-                      <CloudOff className="w-3.5 h-3.5" />
-                      Mode Hors-Ligne
-                  </div>
-                )}
-                
-                {lastSyncTime && !syncError && (
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <Clock className="w-3 h-3" />
-                    <span>Sync : {lastSyncTime.toLocaleTimeString()}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3">
-                {/* Force Push Button */}
-                {cloudConnected && (
-                  <button 
-                    onClick={handleForcePushToCloud}
-                    disabled={isPushing}
-                    className={`bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 shadow-sm ${isPushing ? 'opacity-70 cursor-wait' : ''}`}
-                    title="Sauvegarder immédiatement"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isPushing ? 'animate-spin' : ''}`} />
-                    {isPushing ? 'Enregistrement...' : 'Sauvegarder'}
-                  </button>
-                )}
-
-                <span className="bg-white px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-600 shadow-sm flex gap-2">
-                  <span className="text-indigo-600">{activeTenants.length} Locs.</span>
-                  <span className="text-slate-300">|</span>
-                  <span className="text-amber-600">{prospects.length} Contacts</span>
-                </span>
-                <button 
-                  onClick={() => setActiveTab(Tab.DATA)}
-                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Nouveau
-                </button>
-              </div>
+            </h1>
+            <div className="flex items-center gap-3">
+              <span className="bg-white px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-600 shadow-sm flex gap-2">
+                <span className="text-indigo-600">{activeTenants.length} Locs.</span>
+                <span className="text-slate-300">|</span>
+                <span className="text-amber-600">{prospects.length} Contacts</span>
+              </span>
             </div>
           </div>
-
-          {/* Error Banner */}
-          {syncError && cloudConnected && (
-             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2 animate-in slide-in-from-top-2">
-               <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-               <div>
-                 <p className="font-bold">Problème d'accès aux données :</p>
-                 <p>{syncError}</p>
-                 <p className="mt-1 font-semibold underline">
-                    Action requise : Allez dans la console Firebase &gt; Build &gt; Realtime Database &gt; Règles, et mettez '.read': true et '.write': true.
-                 </p>
-               </div>
-             </div>
-          )}
         </header>
 
-        {/* Content Views */}
         <div className="max-w-7xl mx-auto">
-          
-          {/* Dashboard only uses confirmed TENANTS to avoid skewing stats */}
-          {activeTab === Tab.DASHBOARD && (
-            <Dashboard tenants={activeTenants} residenceConfig={residenceConfig} />
-          )}
-
-          {/* Map only uses confirmed TENANTS for now */}
-          {activeTab === Tab.MAP && (
-            <div className="h-[600px] animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <RelationshipMap tenants={activeTenants} residenceConfig={residenceConfig} originMetadata={originMetadata} />
-            </div>
-          )}
-
-          {activeTab === Tab.STATS && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <AdvancedStats tenants={activeTenants} residenceConfig={residenceConfig} />
-            </div>
-          )}
-
-          {activeTab === Tab.AI && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <MarketingAdvisor tenants={activeTenants} residenceConfig={residenceConfig} />
-            </div>
-          )}
-
+          {activeTab === Tab.DASHBOARD && <Dashboard tenants={activeTenants} residenceConfig={residenceConfig} />}
+          {activeTab === Tab.MAP && <div className="h-[600px]"><RelationshipMap tenants={activeTenants} residenceConfig={residenceConfig} originMetadata={originMetadata} /></div>}
+          {activeTab === Tab.STATS && <AdvancedStats tenants={tenants} residenceConfig={residenceConfig} />}
+          {activeTab === Tab.AI && <MarketingAdvisor tenants={activeTenants} residenceConfig={residenceConfig} />}
           {activeTab === Tab.SETTINGS && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                <Settings 
-                 config={residenceConfig} 
-                 onUpdateConfig={updateConfig} 
-                 originOptions={originOptions}
-                 onUpdateOriginOptions={updateOriginOptions}
-                 onResetAll={handleResetAll}
-                 tenants={tenants}
-                 onImportData={handleImportData}
-                 onConnectCloud={handleCloudConnect}
-                 onDisconnectCloud={handleCloudDisconnect}
-                 onForcePush={handleForcePushToCloud}
-                 isCloudConnected={cloudConnected}
-                 // Passing metadata props
-                 originMetadata={originMetadata}
-                 onUpdateMetadata={updateOriginMetadata}
+                 config={residenceConfig} onUpdateConfig={updateConfig} 
+                 originOptions={originOptions} onUpdateOriginOptions={updateOriginOptions}
+                 onRenameOption={handleRenameOption}
+                 onResetAll={handleResetAll} tenants={tenants} onImportData={handleImportData}
+                 onConnectCloud={handleCloudConnect} onDisconnectCloud={handleCloudDisconnect}
+                 onForcePush={handleForcePushToCloud} isCloudConnected={cloudConnected}
+                 originMetadata={originMetadata} onUpdateMetadata={updateOriginMetadata}
                />
-            </div>
           )}
-
           {activeTab === Tab.DATA && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="lg:col-span-1">
-                <TenantForm 
-                  onAddTenant={addTenant} 
-                  onUpdateTenant={updateTenant}
-                  editingTenant={editingTenant}
-                  onCancelEdit={() => setEditingTenant(null)}
-                  residenceConfig={residenceConfig} 
-                  originOptions={originOptions}
-                />
-              </div>
-              
-              <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                
-                {/* Search Header added above tabs */}
-                <div className="p-4 border-b border-slate-100 bg-slate-50">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input 
-                            type="text" 
-                            placeholder="Rechercher par nom ou prénom..." 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                        />
-                    </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <TenantForm onAddTenant={addTenant} onUpdateTenant={updateTenant} editingTenant={editingTenant} onCancelEdit={() => setEditingTenant(null)} residenceConfig={residenceConfig} originOptions={originOptions} />
+              <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b bg-slate-50 relative">
+                    <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input type="text" placeholder="Rechercher..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm" />
                 </div>
-
-                {/* Sub-tabs for Tenant vs Prospect Table */}
-                <div className="flex border-b border-slate-200">
-                  <button
-                    onClick={() => setDataViewMode(PersonStatus.TENANT)}
-                    className={`flex-1 py-3 px-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${
-                      dataViewMode === PersonStatus.TENANT 
-                      ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' 
-                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <UserCheck className="w-4 h-4" />
-                    Locataires Actifs ({activeTenants.length})
-                  </button>
-                  <button
-                    onClick={() => setDataViewMode(PersonStatus.PROSPECT)}
-                    className={`flex-1 py-3 px-4 text-sm font-medium flex items-center justify-center gap-2 transition-colors border-b-2 ${
-                      dataViewMode === PersonStatus.PROSPECT
-                      ? 'border-amber-500 text-amber-700 bg-amber-50/50' 
-                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    Nouveaux Contacts ({prospects.length})
-                  </button>
+                <div className="flex border-b">
+                  <button onClick={() => setDataViewMode(PersonStatus.TENANT)} className={`flex-1 py-3 text-sm font-medium ${dataViewMode === PersonStatus.TENANT ? 'border-b-2 border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'text-slate-500'}`}>Locataires ({activeTenants.length})</button>
+                  <button onClick={() => setDataViewMode(PersonStatus.PROSPECT)} className={`flex-1 py-3 text-sm font-medium ${dataViewMode === PersonStatus.PROSPECT ? 'border-b-2 border-amber-500 text-amber-700 bg-amber-50/50' : 'text-slate-500'}`}>Contacts ({prospects.length})</button>
                 </div>
-
-                <div className="overflow-x-auto flex-grow">
-                  <table className="w-full text-left text-sm text-slate-600">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 text-slate-900 font-medium">
-                      <tr>
-                        <th className="px-4 py-3">Nom</th>
-                        <th className="px-4 py-3">Résidence</th>
-                        <th className="px-4 py-3">Provenance</th>
-                        <th className="px-4 py-3">Cursus</th>
-                        {dataViewMode === PersonStatus.TENANT && <th className="px-4 py-3">Début / Durée</th>}
-                        <th className="px-4 py-3 text-right">Action</th>
-                      </tr>
+                      <tr><th className="px-4 py-3">Nom</th><th className="px-4 py-3">Résidence</th><th className="px-4 py-3">Provenance</th><th className="px-4 py-3 text-right">Action</th></tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {displayList.length === 0 && (
-                        <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                            {searchTerm ? "Aucun résultat pour cette recherche." : "Aucune donnée trouvée dans cette catégorie."}
-                          </td>
-                        </tr>
-                      )}
+                    <tbody className="divide-y">
                       {[...displayList].reverse().map((t) => (
-                        <tr key={t.id} className={`transition-colors group ${editingTenant?.id === t.id ? 'bg-indigo-50 border-l-4 border-indigo-500' : 'hover:bg-slate-50'}`}>
-                          <td className="px-4 py-3 font-medium text-slate-900">
-                             {t.name}
-                             {editingTenant?.id === t.id && <span className="ml-2 text-[10px] uppercase font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded">Édition</span>}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span 
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border"
-                              style={{ 
-                                backgroundColor: `${getResColor(t.residenceId)}20`,
-                                color: getResColor(t.residenceId),
-                                borderColor: `${getResColor(t.residenceId)}40`
-                              }}
-                            >
-                              {getResName(t.residenceId)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">{t.originName}</td>
-                          <td className="px-4 py-3">
-                            {t.cursus ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 border border-slate-200">
-                                {t.cursus}
-                              </span>
-                            ) : (
-                              <span className="text-slate-300 italic text-xs">Non renseigné</span>
-                            )}
-                          </td>
-                          {dataViewMode === PersonStatus.TENANT && (
-                             <td className="px-4 py-3 text-xs text-slate-500">
-                              <div className="flex flex-col">
-                                {t.startDate && t.endDate ? (
-                                   <span className="text-emerald-600 font-medium">
-                                     {new Date(t.startDate).toLocaleDateString()} - {new Date(t.endDate).toLocaleDateString()}
-                                   </span>
-                                ) : t.startDate ? (
-                                   <span className="text-indigo-600 font-medium">Depuis : {new Date(t.startDate).toLocaleDateString()}</span>
-                                ) : null}
-                                <span className={t.startDate ? "text-slate-400 text-[10px]" : ""}>
-                                  {t.duration || <span className="text-slate-300 italic">N/A</span>}
-                                </span>
-                              </div>
-                            </td>
-                          )}
+                        <tr key={t.id} className="hover:bg-slate-50 group">
+                          <td className="px-4 py-3 font-medium">{t.name}</td>
+                          <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-xs border" style={{ backgroundColor: `${getResColor(t.residenceId)}20`, color: getResColor(t.residenceId), borderColor: `${getResColor(t.residenceId)}40` }}>{getResName(t.residenceId)}</span></td>
+                          <td className="px-4 py-3 text-xs">{t.originName} <span className="text-slate-400">({t.cursus})</span></td>
                           <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => handleEditClick(t)}
-                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all"
-                                title="Modifier"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => deleteTenant(t.id)}
-                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all"
-                                title="Supprimer la fiche"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
+                              <button onClick={() => handleEditClick(t)} className="p-1.5 text-slate-400 hover:text-indigo-600"><Pencil className="w-4 h-4" /></button>
+                              <button onClick={() => deleteTenant(t.id)} className="p-1.5 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                             </div>
                           </td>
                         </tr>
@@ -665,7 +402,6 @@ const App: React.FC = () => {
               </div>
             </div>
           )}
-
         </div>
       </main>
     </div>
